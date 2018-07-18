@@ -2,9 +2,6 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.AnyThread;
-import android.support.annotation.MainThread;
-import android.support.annotation.WorkerThread;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
@@ -37,7 +34,6 @@ public abstract class MultiObserverTaskManager<T> {
         this(Executors::newCachedThreadPool);
     }
 
-    @MainThread
     protected int start(String key, T observer, TaskBuilder builder) {
         if (TextUtils.isEmpty(key) || observer == null || builder == null) {
             return -1;
@@ -53,7 +49,6 @@ public abstract class MultiObserverTaskManager<T> {
         return id;
     }
 
-    @MainThread
     public boolean isRunningEx(String key) {
         checkThread();
         return !TextUtils.isEmpty(key) && mKeyTaskMap.get(key) != null;
@@ -63,7 +58,6 @@ public abstract class MultiObserverTaskManager<T> {
      * remove a observer marked by id,
      * removed observer will not receive callback.
      */
-    @MainThread
     public boolean cancelEx(int id) {
         checkThread();
         Task task = mIdTaskMap.get(id);
@@ -79,7 +73,6 @@ public abstract class MultiObserverTaskManager<T> {
      * cancel a task by marked by key.
      * all observer may receive a callback (depend on implementation)
      */
-    @MainThread
     public boolean cancelEx(String key) {
         if (TextUtils.isEmpty(key)) {
             return false;
@@ -93,14 +86,12 @@ public abstract class MultiObserverTaskManager<T> {
         return false;
     }
 
-    @MainThread
     public void cancelAllEx() {
         for (String key : new HashSet<>(mKeyTaskMap.keySet())) {
             cancelEx(key);
         }
     }
 
-    @MainThread
     private int getObserverId() {
         for (int id = 0; ; ++id)
             if (mIdTaskMap.indexOfKey(id) < 0)
@@ -132,7 +123,6 @@ public abstract class MultiObserverTaskManager<T> {
             mObserverMap = new SparseArray<>();
         }
 
-        @MainThread
         private void start() {
             mKeyTaskMap.put(mKey, this);
             mFuture = mThreadPool.submit(this);
@@ -165,7 +155,6 @@ public abstract class MultiObserverTaskManager<T> {
             });
         }
 
-        @MainThread
         protected final Set<T> getObservers() {
             Set<T> set = new HashSet<>();
             for (int i = 0; i < mObserverMap.size(); ++i)
@@ -181,12 +170,10 @@ public abstract class MultiObserverTaskManager<T> {
          * check this method in worker thread to get a hint ,so that you can stop background work appropriately .
          * always check this method in main thread before you return the result.
          */
-        @AnyThread
         protected boolean isCanceled() {
             return mCanceled;
         }
 
-        @AnyThread
         protected String getKey() {
             return mKey;
         }
@@ -199,7 +186,6 @@ public abstract class MultiObserverTaskManager<T> {
          * <p>
          * either {@link #onCanceled()} or {@link #onCanceledBeforeStart()} will be invoked, avoid running time-consuming tasks in these methods.
          */
-        @MainThread
         private void cancel() {
             synchronized (Task.this) {
                 mCanceled = true;
@@ -212,12 +198,10 @@ public abstract class MultiObserverTaskManager<T> {
             }
         }
 
-        @MainThread
         protected void onCanceled() {
 
         }
 
-        @MainThread
         protected void onCanceledBeforeStart() {
 
         }
@@ -226,7 +210,6 @@ public abstract class MultiObserverTaskManager<T> {
          * if task has not started when {@link #cancel()} is called,then the task should never run.
          * in this circumstance, this method will never be invoked.
          */
-        @WorkerThread
         protected abstract void doInBackground();
 
         /**
@@ -240,7 +223,6 @@ public abstract class MultiObserverTaskManager<T> {
          * maybe an observer register itself after you return result to other observers and before the task has been cleared.
          * the new comer will die alone without any callback been invoked.
          */
-        @AnyThread
         protected void setPostResult(Runnable run) {
             mPostResult = run;
         }
@@ -249,20 +231,17 @@ public abstract class MultiObserverTaskManager<T> {
          * remove this task's information from {@link #mKeyTaskMap} and {@link #mIdTaskMap}
          * keep the information of {@link #mObserverMap} , so that you can return results to observers.
          */
-        @MainThread
         private void clear() {
             mKeyTaskMap.remove(mKey);
             for (int i = 0; i < mObserverMap.size(); ++i)
                 mIdTaskMap.remove(mObserverMap.keyAt(i));
         }
 
-        @MainThread
         final void registerObserver(int id, T observer) {
             mObserverMap.put(id, observer);
             mIdTaskMap.put(id, this);
         }
 
-        @MainThread
         final void unregisterObserver(int id) {
             mIdTaskMap.remove(id);
             mObserverMap.remove(id);
@@ -272,7 +251,6 @@ public abstract class MultiObserverTaskManager<T> {
             }
         }
 
-        @MainThread
         final void unregisterAll() {
             clear();
             cancel();

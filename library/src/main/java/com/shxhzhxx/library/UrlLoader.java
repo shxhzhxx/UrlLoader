@@ -2,8 +2,6 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.MainThread;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -90,22 +88,18 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @return download id (>=0) , or -1 if failed
      */
     @Deprecated
-    @MainThread
-    public static int load(final String url, @Nullable File output, @Nullable ProgressObserver observer) {
+    public static int load(final String url,  File output,  ProgressObserver observer) {
         return mInstance.loadEx(url, output, observer);
     }
 
-    @MainThread
     public static int load(String url, ProgressObserver observer) {
         return load(url, null, observer);
     }
 
-    @MainThread
     public static int load(String url) {
         return load(url, null);
     }
 
-    @MainThread
     public static boolean deleteCacheFile(String url) {
         return mInstance.deleteCacheFileEx(url);
     }
@@ -146,17 +140,14 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return mInstance.clearCacheEx(url);
     }
 
-    @MainThread
     public static long cacheSize() {
         return mInstance.cacheSizeEx();
     }
 
-    @MainThread
     public static void clearCache() {
         mInstance.clearCacheEx();
     }
 
-    @MainThread
     public static String md5(String raw) {
         return mInstance.md5Ex(raw);
     }
@@ -194,7 +185,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 .build();
     }
 
-    private int loadEx(final String url, @Nullable File output, @Nullable ProgressObserver observer) {
+    private int loadEx(final String url, File output,  ProgressObserver observer) {
         if (TextUtils.isEmpty(url)) {
             Log.e(TAG, TAG + ".load: invalid params");
             return -1;
@@ -211,7 +202,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         });
     }
 
-    @MainThread
     private boolean deleteCacheFileEx(String url) {
         if (isRunningEx(url))
             return false;
@@ -260,7 +250,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return System.currentTimeMillis() < headerCache.lastModified() + control.maxAgeSeconds() * 1000;
     }
 
-    @MainThread
     private boolean clearCacheEx(String url) {
         File headerCache = getHeaderCache(url);
         File dataCache = getDataCache(url);

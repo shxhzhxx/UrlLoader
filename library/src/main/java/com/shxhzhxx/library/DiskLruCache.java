@@ -1,9 +1,6 @@
 package com.shxhzhxx.library;
 
 import android.os.FileObserver;
-import android.support.annotation.AnyThread;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.LruCache;
 
@@ -42,7 +39,7 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
              * This method is invoked on a special FileObserver thread.
              * */
             @Override
-            public void onEvent(int event, @Nullable String path) {
+            public void onEvent(int event, String path) {
                 if (path == null || !accept(mCachePath, path))
                     return;
                 switch (event) {
@@ -87,7 +84,6 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
      * this function needs to be thread safety
      */
     @Override
-    @AnyThread
     public boolean accept(File dir, String name) {
         return new File(dir, name).isFile();
     }
@@ -96,7 +92,7 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         return getFile(key, null);
     }
 
-    protected File getFile(@NonNull String key, String suffix) {
+    protected File getFile(String key, String suffix) {
         String child = md5(key);
         if (!TextUtils.isEmpty(suffix)) {
             child += "." + suffix;
@@ -107,7 +103,6 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
     /**
      * this function needs to be thread safety
      */
-    @AnyThread
     protected int sizeOf(File file) {
         if (file == null || !file.exists())
             return 0;
