@@ -33,6 +33,14 @@ task javadoc(type: Javadoc) {
     classpath += configurations.compile
 }
 
+// build a jar with source files
+task sourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier = 'sources'
+
+    include("**/ICatapush.java")
+}
+
 // build a jar with javadoc
 task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
@@ -40,6 +48,7 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 }
 
 artifacts {
+    archives sourcesJar
     archives javadocJar
 }
 
