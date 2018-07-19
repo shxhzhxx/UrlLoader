@@ -30,7 +30,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserver> {
-    private static final long UPDATE_TIME_INTERVAL = 100;
+    private static final long UPDATE_TIME_INTERVAL = 500;
     private static final int MAX_BUF_SIZE = 8192;
     private static final int MIN_BUF_SIZE = 512;
 
@@ -88,7 +88,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @param url    mUrl
      * @param output the mOutput used to store data.
      *               if null , UrlLoader will create a file which name is url's md5 hash
-     * @return download id (>=0) , or -1 if failed
+     * @return non-negative download id , or -1 if failed
      */
     @Deprecated
     public static int load(final String url, File output, ProgressObserver observer) {
