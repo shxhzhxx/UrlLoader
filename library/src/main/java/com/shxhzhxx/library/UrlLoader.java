@@ -7,11 +7,14 @@ import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.FileChannel;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
@@ -88,7 +91,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @return download id (>=0) , or -1 if failed
      */
     @Deprecated
-    public static int load(final String url,  File output,  ProgressObserver observer) {
+    public static int load(final String url, File output, ProgressObserver observer) {
         return mInstance.loadEx(url, output, observer);
     }
 
@@ -119,6 +122,22 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return url.substring(0, last).replace("\\", "");
     }
 
+    public static boolean copyFile(File src, File dst) {
+        if (dst.exists())
+            if (!dst.delete())
+                return false;
+        try {
+            FileChannel in = new FileInputStream(src).getChannel();
+            FileChannel out = new FileOutputStream(dst).getChannel();
+            out.transferFrom(in, 0, in.size());
+            in.close();
+            out.close();
+            return true;
+        } catch (IOException ignore) {
+            return false;
+        }
+    }
+
     /**
      * Returns download file size or cache size.
      */
@@ -135,7 +154,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
 
     /**
      * clear download file or cache file.
-     * */
+     */
     public static boolean clearCache(String url) {
         return mInstance.clearCacheEx(url);
     }
@@ -172,11 +191,14 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
     private UrlLoaderCache mCache;
     private OkHttpClient mOkHttpClient;
 
-    private UrlLoader(File cachePath, int maxCacheSize, int maximumPoolSize) {
-        super(() -> {
-            ThreadPoolExecutor executor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
-            executor.allowCoreThreadTimeOut(true);
-            return executor;
+    private UrlLoader(File cachePath, int maxCacheSize, final int maximumPoolSize) {
+        super(new ExecutorFactory() {
+            @Override
+            public ExecutorService newExecutor() {
+                ThreadPoolExecutor executor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+                executor.allowCoreThreadTimeOut(true);
+                return executor;
+            }
         });
         mCache = new UrlLoaderCache(cachePath, maxCacheSize);
         mOkHttpClient = new OkHttpClient.Builder()
@@ -185,7 +207,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 .build();
     }
 
-    private int loadEx(final String url, File output,  ProgressObserver observer) {
+    private int loadEx(final String url, File output, ProgressObserver observer) {
         if (TextUtils.isEmpty(url)) {
             Log.e(TAG, TAG + ".load: invalid params");
             return -1;
@@ -300,36 +322,42 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         }
 
         private void onComplete() {
-            setPostResult(() -> {
-                if (isCanceled()) {
-                    for (ProgressObserver observer : getObservers()) {
-                        observer.onCanceled();
-                    }
-                } else {
-                    for (ProgressObserver observer : getObservers()) {
-                        if (!mDataCache.exists() || !observer.mFile.equals(mDataCache)) {
-                            // Copying big file may take a lot of time, so you should avoid specifying the output file.
-                            if (!mDataCache.exists() || !FileUtils.copyFile(mDataCache, observer.mFile)) {
-                                Log.e(TAG, "could not find cache file for url:" + mUrl);
-                                observer.onFailed();
-                                continue;
-                            }
+            setPostResult(new Runnable() {
+                @Override
+                public void run() {
+                    if (isCanceled()) {
+                        for (ProgressObserver observer : getObservers()) {
+                            observer.onCanceled();
                         }
-                        observer.onComplete(observer.mFile);
+                    } else {
+                        for (ProgressObserver observer : getObservers()) {
+                            if (!mDataCache.exists() || !observer.mFile.equals(mDataCache)) {
+                                // Copying big file may take a lot of time, so you should avoid specifying the output file.
+                                if (!mDataCache.exists() || !copyFile(mDataCache, observer.mFile)) {
+                                    Log.e(TAG, "could not find cache file for url:" + mUrl);
+                                    observer.onFailed();
+                                    continue;
+                                }
+                            }
+                            observer.onComplete(observer.mFile);
+                        }
                     }
                 }
             });
         }
 
         private void onFailed() {
-            setPostResult(() -> {
-                if (isCanceled()) {
-                    for (ProgressObserver observer : getObservers()) {
-                        observer.onCanceled();
-                    }
-                } else {
-                    for (ProgressObserver observer : getObservers()) {
-                        observer.onFailed();
+            setPostResult(new Runnable() {
+                @Override
+                public void run() {
+                    if (isCanceled()) {
+                        for (ProgressObserver observer : getObservers()) {
+                            observer.onCanceled();
+                        }
+                    } else {
+                        for (ProgressObserver observer : getObservers()) {
+                            observer.onFailed();
+                        }
                     }
                 }
             });
@@ -344,18 +372,24 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         private void scheduleDownloadSpeedUpdate() {
             stopDownloadSpeedUpdate();
             mPreDownloadContentLength = mDownloadContentLength;
-            mDownloadSpeedUpdate = () -> {
-                if (isCanceled())
-                    return;
-                for (ProgressObserver observer : getObservers()) {
-                    observer.onProgressUpdate(mContentLength, mDownloadContentLength, mBytePerSec);
+            mDownloadSpeedUpdate = new Runnable() {
+                @Override
+                public void run() {
+                    if (isCanceled())
+                        return;
+                    for (ProgressObserver observer : getObservers()) {
+                        observer.onProgressUpdate(mContentLength, mDownloadContentLength, mBytePerSec);
+                    }
                 }
             };
             mScheduleFuture = Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(
-                    () -> {
-                        mBytePerSec = (mDownloadContentLength - mPreDownloadContentLength) * 1000 / UPDATE_TIME_INTERVAL;
-                        mPreDownloadContentLength = mDownloadContentLength;
-                        mMainHandler.post(mDownloadSpeedUpdate);
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            mBytePerSec = (mDownloadContentLength - mPreDownloadContentLength) * 1000 / UPDATE_TIME_INTERVAL;
+                            mPreDownloadContentLength = mDownloadContentLength;
+                            mMainHandler.post(mDownloadSpeedUpdate);
+                        }
                     }, UPDATE_TIME_INTERVAL,
                     UPDATE_TIME_INTERVAL, TimeUnit.MILLISECONDS);
         }

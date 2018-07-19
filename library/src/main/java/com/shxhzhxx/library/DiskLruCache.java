@@ -9,6 +9,7 @@ import java.io.FilenameFilter;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Comparator;
 
 public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements FilenameFilter {
     private static final String TAG = "DiskLruCache";
@@ -64,7 +65,15 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         mFileObserver.startWatching();
 
         File[] files = mCachePath.listFiles(this);
-        Arrays.sort(files, (o1, o2) -> Long.compare(o1.lastModified(), o2.lastModified()));
+        Arrays.sort(files, new Comparator<File>() {
+            @Override
+            public int compare(File o1, File o2) {
+                return (int) (o1.lastModified()-o2.lastModified());
+//                long x=o1.lastModified();
+//                long y=o2.lastModified();
+//                return (x < y) ? -1 : ((x == y) ? 0 : 1);
+            }
+        });
         for (File file : files) {
             put(file.getName(), new Info(file, sizeOf(file)));
         }

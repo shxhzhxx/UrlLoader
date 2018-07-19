@@ -2,7 +2,6 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.WorkerThread;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
@@ -32,7 +31,12 @@ public abstract class MultiObserverTaskManager<T> {
     }
 
     public MultiObserverTaskManager() {
-        this(Executors::newCachedThreadPool);
+        this(new ExecutorFactory() {
+            @Override
+            public ExecutorService newExecutor() {
+                return Executors.newCachedThreadPool();
+            }
+        });
     }
 
     protected int start(String key, T observer, TaskBuilder builder) {
@@ -146,12 +150,15 @@ public abstract class MultiObserverTaskManager<T> {
         }
 
         private void runResult() {
-            mMainHandler.post(() -> {
-                if (!isCanceled()) //canceled task has already been cleared, redo this may lead new task with same key cleared by accident.
-                    clear();
-                Runnable result = mPostResult; // mPostResult can be changed by any thread.
-                if (result != null) {
-                    result.run();
+            mMainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!isCanceled()) //canceled task has already been cleared, redo this may lead new task with same key cleared by accident.
+                        clear();
+                    Runnable result = mPostResult; // mPostResult can be changed by any thread.
+                    if (result != null) {
+                        result.run();
+                    }
                 }
             });
         }
@@ -211,7 +218,6 @@ public abstract class MultiObserverTaskManager<T> {
          * if task has not started when {@link #cancel()} is called,then the task should never run.
          * in this circumstance, this method will never be invoked.
          */
-        @WorkerThread
         protected abstract void doInBackground();
 
         /**
