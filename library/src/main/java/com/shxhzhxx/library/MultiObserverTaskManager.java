@@ -2,6 +2,7 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.support.annotation.WorkerThread;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
@@ -210,6 +211,7 @@ public abstract class MultiObserverTaskManager<T> {
          * if task has not started when {@link #cancel()} is called,then the task should never run.
          * in this circumstance, this method will never be invoked.
          */
+        @WorkerThread
         protected abstract void doInBackground();
 
         /**
