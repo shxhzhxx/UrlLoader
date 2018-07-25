@@ -39,17 +39,52 @@ Add it in your root build.gradle at the end of repositories:
 
 ## Usage
 
-```
-//init once. typically in Application's onCreate callback
-UrlLoader.init(getCacheDir());
+#### Use it directly
 
-
+```java
+UrlLoader urlLoader=new UrlLoader(getCacheDir(),100*1024*1024,5);
 String url="http://xxx";
-UrlLoader.load(url, new UrlLoader.ProgressObserver() {
-    @Override
-    public void onComplete(File file) {
-    	//success
-    }
+urlLoader.load(url, new UrlLoader.ProgressObserver() {
+	@Override
+	public void onComplete(File file) {
+		//success
+	}
 });
+```
+
+
+
+#### Use singleton pattern 
+
+DownloadManager.java
+
+```java
+public abstract class DownloadManager {
+    private static UrlLoader mInstance;
+
+    public static void init(@NonNull Context context) {
+        mInstance = new UrlLoader(context.getCacheDir(), 300 * 1024 * 1024, 5);
+    }
+
+    public static UrlLoader getInstance() {
+        return mInstance;
+    }
+}
+```
+
+Application.java
+
+```java
+@Override
+public void onCreate() {
+    super.onCreate();
+    DownloadManager.init(this);
+}
+```
+
+then you can use it anywhere
+
+```java
+DownloadManager.getInstance().load(url);
 ```
 
