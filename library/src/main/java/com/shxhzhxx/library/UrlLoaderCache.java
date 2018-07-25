@@ -1,11 +1,10 @@
 package com.shxhzhxx.library;
 
 import java.io.File;
-import java.util.UUID;
 
 public class UrlLoaderCache extends DiskLruCache {
-    private final String mSuffixData="shx_d";
-    private final String mSuffixHeader="shx_h";
+    private final String mSuffixData = "6aef4_d";
+    private final String mSuffixHeader = "6aef4_h";
 
     public UrlLoaderCache(File cachePath, int maxSize) {
         super(cachePath, maxSize);

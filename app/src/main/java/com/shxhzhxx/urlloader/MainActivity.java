@@ -1,14 +1,16 @@
 package com.shxhzhxx.urlloader;
 
-import android.support.v7.app.AppCompatActivity;
+import android.content.Context;
 import android.os.Bundle;
-import android.util.Log;
+import android.support.annotation.NonNull;
+import android.support.v7.app.AppCompatActivity;
+import android.view.View;
 
-import com.shxhzhxx.library.UrlLoader;
+import com.shxhzhxx.library.DiskLruCache;
 
 import java.io.File;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static final String TAG = "MainActivity";
 
     @Override
@@ -16,22 +18,16 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        UrlLoader.init(getCacheDir());
-        UrlLoader.load("https://image.yizhujiao.com/FiZr1lFxhobKLogy4pkTfLqv6xrV", new UrlLoader.ProgressObserver() {
-            @Override
-            public void onComplete(File file) {
-                Log.d(TAG, "onComplete");
-            }
+        Context mContext = null;
+        if (Math.random() > 0.5) {
+            mContext = this;
+        }
+        DownloadManager.init(mContext);
+        findViewById(R.id.download).setOnClickListener(this);
+    }
 
-            @Override
-            public void onFailed() {
-                Log.d(TAG, "onFailed");
-            }
-
-            @Override
-            public void onCanceled() {
-                Log.d(TAG, "onCanceled");
-            }
-        });
+    @Override
+    public void onClick(View view) {
+        DownloadManager.getInstance().load("https://image.yizhujiao.com/FiZr1lFxhobKLogy4pkTfLqv6xrV");
     }
 }

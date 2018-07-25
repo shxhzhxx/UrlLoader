@@ -2,17 +2,18 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.support.annotation.IntRange;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.FileChannel;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,9 +36,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
     private static final int MIN_BUF_SIZE = 512;
 
     public abstract static class ProgressObserver {
-        // For internal use
-        private File mFile;
-
         /**
          * @param file not writable. If you need to modify it ,make a copy.
          */
@@ -53,145 +51,22 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         /**
          * @param total   total length of mOutput in byte, -1 if unknown.
          * @param current downloaded length in byte
-         * @param speed   download speed, unit: byte per second
+         * @param speed   current download speed,  unit: byte per second
          */
         public void onProgressUpdate(long total, long current, long speed) {
         }
-    }
-
-    private static UrlLoader mInstance;
-
-    public static void init(File cachePath) {
-        /*
-         * default params to init UrlLoader, especially suit for image cache.
-         * 50M is enough for image cache. For other circumstance like file download, set a bigger cache size.
-         * */
-        init(cachePath, 50 * 1024 * 1024, 5);
-    }
-
-    /**
-     * @param cachePath       root directory for cache file
-     * @param maxCacheSize    max disk cache size in bytes
-     * @param maximumPoolSize the maximum number of threads to allow in the pool
-     */
-    public static synchronized void init(File cachePath, int maxCacheSize, int maximumPoolSize) {
-        if (mInstance != null)
-            return;
-        mInstance = new UrlLoader(cachePath, maxCacheSize, maximumPoolSize);
-    }
-
-    /**
-     * load network resource.
-     * specify output file(especially big file) could slow down main thread performance,
-     * thus you should use load(String, ProgressObserver) instead.
-     *
-     * @param url    mUrl
-     * @param output the mOutput used to store data.
-     *               if null , UrlLoader will create a file which name is url's md5 hash
-     * @return non-negative download id , or -1 if failed
-     */
-    @Deprecated
-    public static int load(final String url, File output, ProgressObserver observer) {
-        return mInstance.loadEx(url, output, observer);
-    }
-
-    public static int load(String url, ProgressObserver observer) {
-        return load(url, null, observer);
-    }
-
-    public static int load(String url) {
-        return load(url, null);
-    }
-
-    public static boolean deleteCacheFile(String url) {
-        return mInstance.deleteCacheFileEx(url);
-    }
-
-    /**
-     * discard everything after "?" and "#"
-     */
-    @Deprecated
-    public static String rawUrl(String url) {
-        int last = url.length();
-        if (url.contains("?")) {
-            last = url.indexOf("?");
-        }
-        if (url.contains("#")) {
-            last = Math.min(last, url.indexOf("#"));
-        }
-        return url.substring(0, last).replace("\\", "");
-    }
-
-    public static boolean copyFile(File src, File dst) {
-        if (dst.exists())
-            if (!dst.delete())
-                return false;
-        try {
-            FileChannel in = new FileInputStream(src).getChannel();
-            FileChannel out = new FileOutputStream(dst).getChannel();
-            out.transferFrom(in, 0, in.size());
-            in.close();
-            out.close();
-            return true;
-        } catch (IOException ignore) {
-            return false;
-        }
-    }
-
-    /**
-     * Returns download file size or cache size.
-     */
-    public static long cacheSize(String url) {
-        return mInstance.getDataCache(url).length();
-    }
-
-    /**
-     * Returns if download is finished.
-     */
-    public static boolean checkDownload(String url) {
-        return mInstance.checkDownloadEx(url);
-    }
-
-    /**
-     * clear download file or cache file.
-     */
-    public static boolean clearCache(String url) {
-        return mInstance.clearCacheEx(url);
-    }
-
-    public static long cacheSize() {
-        return mInstance.cacheSizeEx();
-    }
-
-    public static void clearCache() {
-        mInstance.clearCacheEx();
-    }
-
-    public static String md5(String raw) {
-        return mInstance.md5Ex(raw);
-    }
-
-    public static boolean isRunning(String key) {
-        return mInstance.isRunningEx(key);
-    }
-
-    public static boolean cancel(int id) {
-        return mInstance.cancelEx(id);
-    }
-
-    public static boolean cancel(String url) {
-        return mInstance.cancelEx(url);
-    }
-
-    public static void cancelAll() {
-        mInstance.cancelAllEx();
     }
 
     private Handler mMainHandler = new Handler(Looper.getMainLooper());
     private UrlLoaderCache mCache;
     private OkHttpClient mOkHttpClient;
 
-    private UrlLoader(File cachePath, int maxCacheSize, final int maximumPoolSize) {
+    /**
+     * @param cachePath       directory for cache file
+     * @param maxCacheSize    max disk cache size in bytes
+     * @param maximumPoolSize the maximum number of threads to allow in the pool
+     */
+    public UrlLoader(@NonNull File cachePath, @IntRange(from = 0) int maxCacheSize, @IntRange(from = 0) final int maximumPoolSize) {
         super(new ExecutorFactory() {
             @Override
             public ExecutorService newExecutor() {
@@ -207,15 +82,15 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 .build();
     }
 
-    private int loadEx(final String url, File output, ProgressObserver observer) {
-        if (TextUtils.isEmpty(url)) {
-            Log.e(TAG, TAG + ".load: invalid params");
-            return -1;
-        }
-        if (observer == null)
-            observer = new ProgressObserver() {
-            };
-        observer.mFile = output != null ? output : getDataCache(url);
+
+    /**
+     * load network resource.
+     *
+     * @param url      Uniform Resource Locator
+     * @param observer observer for download task, nullable.
+     * @return non-negative download id , or -1 if failed
+     */
+    public int load(final String url, @Nullable ProgressObserver observer) {
         return start(url, observer, new TaskBuilder() {
             @Override
             public Task build() {
@@ -224,23 +99,27 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         });
     }
 
-    private boolean deleteCacheFileEx(String url) {
-        if (isRunningEx(url))
+    public int load(String url) {
+        return load(url, null);
+    }
+
+    public boolean deleteCacheFile(String url) {
+        if (isRunning(url))
             return false;
         File headerCache = getHeaderCache(url), dataCache = getDataCache(url);
         return (!headerCache.exists() || headerCache.delete()) && (!dataCache.exists() || dataCache.delete());
     }
 
-    private File getHeaderCache(String url) {
+    public File getHeaderCache(String url) {
         return mCache.getHeaderCache(url == null ? "" : url);
     }
 
-    private File getDataCache(String url) {
+    public File getDataCache(String url) {
         return mCache.getDataCache(url == null ? "" : url);
     }
 
-    private boolean checkDownloadEx(String url) {
-        if (TextUtils.isEmpty(url) || isRunningEx(url))
+    public boolean checkDownload(String url) {
+        if (TextUtils.isEmpty(url) || isRunning(url))
             return false;
         File headerCache = mCache.getHeaderCache(url);
         File dataCache = mCache.getDataCache(url);
@@ -272,21 +151,21 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return System.currentTimeMillis() < headerCache.lastModified() + control.maxAgeSeconds() * 1000;
     }
 
-    private boolean clearCacheEx(String url) {
+    public boolean clearCache(String url) {
         File headerCache = getHeaderCache(url);
         File dataCache = getDataCache(url);
-        return !isRunningEx(url) && (!headerCache.exists() || headerCache.delete()) && (!dataCache.exists() || dataCache.delete());
+        return !isRunning(url) && (!headerCache.exists() || headerCache.delete()) && (!dataCache.exists() || dataCache.delete());
     }
 
-    private long cacheSizeEx() {
+    public long cacheSize() {
         return mCache.size();
     }
 
-    private void clearCacheEx() {
+    public void clearCache() {
         mCache.evictAll();
     }
 
-    private String md5Ex(String raw) {
+    public String md5(String raw) {
         return mCache.md5(raw);
     }
 
@@ -308,7 +187,8 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         @Override
         protected void onCanceledBeforeStart() {
             for (ProgressObserver observer : getObservers()) {
-                observer.onCanceled();
+                if (observer != null)
+                    observer.onCanceled();
             }
         }
 
@@ -327,19 +207,13 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 public void run() {
                     if (isCanceled()) {
                         for (ProgressObserver observer : getObservers()) {
-                            observer.onCanceled();
+                            if (observer != null)
+                                observer.onCanceled();
                         }
                     } else {
                         for (ProgressObserver observer : getObservers()) {
-                            if (!mDataCache.exists() || !observer.mFile.equals(mDataCache)) {
-                                // Copying big file may take a lot of time, so you should avoid specifying the output file.
-                                if (!mDataCache.exists() || !copyFile(mDataCache, observer.mFile)) {
-                                    Log.e(TAG, "could not find cache file for url:" + mUrl);
-                                    observer.onFailed();
-                                    continue;
-                                }
-                            }
-                            observer.onComplete(observer.mFile);
+                            if (observer != null)
+                                observer.onComplete(mDataCache);
                         }
                     }
                 }
@@ -352,11 +226,13 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 public void run() {
                     if (isCanceled()) {
                         for (ProgressObserver observer : getObservers()) {
-                            observer.onCanceled();
+                            if (observer != null)
+                                observer.onCanceled();
                         }
                     } else {
                         for (ProgressObserver observer : getObservers()) {
-                            observer.onFailed();
+                            if (observer != null)
+                                observer.onFailed();
                         }
                     }
                 }
@@ -378,7 +254,8 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                     if (isCanceled())
                         return;
                     for (ProgressObserver observer : getObservers()) {
-                        observer.onProgressUpdate(mContentLength, mDownloadContentLength, mBytePerSec);
+                        if (observer != null)
+                            observer.onProgressUpdate(mContentLength, mDownloadContentLength, mBytePerSec);
                     }
                 }
             };
@@ -399,6 +276,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
          * https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
          */
         private boolean mainFunc() {
+            Log.d(TAG, "mainFunc: ");
             if (!mHeaderCache.exists() || !mDataCache.exists())
                 return download();
             Headers.Builder builder = new Headers.Builder();
@@ -489,6 +367,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         }
 
         private boolean download() {
+            Log.d(TAG, "download: ");
             if (!resetCache())
                 return false;
             Request.Builder request;
@@ -506,14 +385,11 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 Log.e(TAG, "execute IOException:" + e.getMessage());
                 return false;
             }
-            ResponseBody body = response.body();
-            assert body != null;
-            if (isCanceled()) {
-                body.close();
-                return false;
-            }
-            if (!response.isSuccessful()) {
-                Log.e(TAG, "http code:" + response.code());
+            if (isCanceled() || !response.isSuccessful()) {
+                if (!response.isSuccessful())
+                    Log.e(TAG, "http code:" + response.code());
+                ResponseBody body = response.body();
+                assert body != null;
                 body.close();
                 return false;
             }
@@ -578,7 +454,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             return readBody(body, 0);
         }
 
-        private boolean readBody(ResponseBody body, long initFileLength) {
+        private boolean readBody(@NonNull ResponseBody body, long initFileLength) {
             long contentLength = body.contentLength();
             mContentLength = contentLength == -1 ? -1 : contentLength + initFileLength;
             mDownloadContentLength = initFileLength;

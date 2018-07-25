@@ -1,6 +1,8 @@
 package com.shxhzhxx.library;
 
 import android.os.FileObserver;
+import android.support.annotation.IntRange;
+import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.LruCache;
 
@@ -12,7 +14,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements FilenameFilter {
-    private static final String TAG = "DiskLruCache";
     private File mCachePath;
     private MessageDigest mMsgDigest;
     private FileObserver mFileObserver;//hold reference
@@ -21,7 +22,7 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
     /**
      * it's not safe to change file(in other thread) while constructor function is running.
      */
-    public DiskLruCache(File cachePath, int maxSize) {
+    public DiskLruCache(@NonNull File cachePath, @IntRange(from = 0) int maxSize) {
         super(maxSize);
         mCachePath = cachePath;
         if (mCachePath == null)
@@ -69,9 +70,6 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
             @Override
             public int compare(File o1, File o2) {
                 return (int) (o1.lastModified()-o2.lastModified());
-//                long x=o1.lastModified();
-//                long y=o2.lastModified();
-//                return (x < y) ? -1 : ((x == y) ? 0 : 1);
             }
         });
         for (File file : files) {

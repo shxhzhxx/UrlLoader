@@ -39,8 +39,21 @@ public abstract class MultiObserverTaskManager<T> {
         });
     }
 
+
+    public abstract class TaskBuilder {
+        public abstract Task build();
+    }
+
+    /**
+     * join a task or start a new task.
+     *
+     * @param key      should not be null nor empty string
+     * @param observer may be null.
+     * @param builder  builder
+     * @return non-negative task id , or -1 if failed
+     */
     protected int start(String key, T observer, TaskBuilder builder) {
-        if (TextUtils.isEmpty(key) || observer == null || builder == null) {
+        if (TextUtils.isEmpty(key) || builder == null) {
             return -1;
         }
         checkThread();
@@ -54,7 +67,7 @@ public abstract class MultiObserverTaskManager<T> {
         return id;
     }
 
-    public boolean isRunningEx(String key) {
+    public boolean isRunning(String key) {
         checkThread();
         return !TextUtils.isEmpty(key) && mKeyTaskMap.get(key) != null;
     }
@@ -63,7 +76,7 @@ public abstract class MultiObserverTaskManager<T> {
      * remove a observer marked by id,
      * removed observer will not receive callback.
      */
-    public boolean cancelEx(int id) {
+    public boolean cancel(int id) {
         checkThread();
         Task task = mIdTaskMap.get(id);
         if (task != null) {
@@ -78,7 +91,7 @@ public abstract class MultiObserverTaskManager<T> {
      * cancel a task by marked by key.
      * all observer may receive a callback (depend on implementation)
      */
-    public boolean cancelEx(String key) {
+    public boolean cancel(String key) {
         if (TextUtils.isEmpty(key)) {
             return false;
         }
@@ -91,9 +104,9 @@ public abstract class MultiObserverTaskManager<T> {
         return false;
     }
 
-    public void cancelAllEx() {
+    public void cancelAll() {
         for (String key : new HashSet<>(mKeyTaskMap.keySet())) {
-            cancelEx(key);
+            cancel(key);
         }
     }
 
@@ -107,10 +120,6 @@ public abstract class MultiObserverTaskManager<T> {
         if (Thread.currentThread() != mMainThread) {
             throw new IllegalThreadStateException("MultiObserverTaskManager must be called by main thread");
         }
-    }
-
-    protected abstract class TaskBuilder {
-        public abstract Task build();
     }
 
     public abstract class Task implements Runnable {
@@ -190,7 +199,7 @@ public abstract class MultiObserverTaskManager<T> {
          * cancel executed in main thread.
          * cancel called in two case:
          * 1.   all observer unregistered ,which {@link #getObservers()} return an empty list;
-         * 2.   {@link #cancelEx(String)} been called, which {@link #getObservers()} return a list contains current observers.
+         * 2.   {@link #cancel(String)} been called, which {@link #getObservers()} return a list contains current observers.
          * <p>
          * either {@link #onCanceled()} or {@link #onCanceledBeforeStart()} will be invoked, avoid running time-consuming tasks in these methods.
          */
@@ -245,6 +254,10 @@ public abstract class MultiObserverTaskManager<T> {
                 mIdTaskMap.remove(mObserverMap.keyAt(i));
         }
 
+        /**
+         * @param id       task id
+         * @param observer may be null. {@link #getObservers()} will return whatever this param is.
+         */
         final void registerObserver(int id, T observer) {
             mObserverMap.put(id, observer);
             mIdTaskMap.put(id, this);
