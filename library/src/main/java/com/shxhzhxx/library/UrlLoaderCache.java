@@ -1,24 +1,25 @@
 package com.shxhzhxx.library;
 
+import android.support.annotation.IntRange;
+import android.support.annotation.NonNull;
+
 import java.io.File;
 
 public class UrlLoaderCache extends DiskLruCache {
     private final String mSuffixData = "6aef4_d";
     private final String mSuffixHeader = "6aef4_h";
 
-    public UrlLoaderCache(File cachePath, int maxSize) {
+    public UrlLoaderCache(@NonNull File cachePath, @IntRange(from = 1) int maxSize) {
         super(cachePath, maxSize);
     }
 
     @Override
-    public boolean accept(File dir, String name) {
+    public boolean accept(File dir, @NonNull String name) {
         return name.endsWith("." + mSuffixData);
     }
 
     @Override
-    protected int sizeOf(File file) {
-        if (file == null || !accept(file.getParentFile(), file.getName()))
-            return 0;
+    protected int sizeOf(@NonNull File file) {
         return (int) (file.length() + findHeaderCache(file).length());
     }
 

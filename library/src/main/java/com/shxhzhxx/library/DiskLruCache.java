@@ -1,8 +1,12 @@
 package com.shxhzhxx.library;
 
 import android.os.FileObserver;
+import android.support.annotation.AnyThread;
 import android.support.annotation.IntRange;
+import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.annotation.WorkerThread;
 import android.text.TextUtils;
 import android.util.LruCache;
 
@@ -12,21 +16,26 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
+
+/**
+ * Note: {@link #size()} is not guaranteed to be precisely.
+ * The observer of cachePath get callback on a special FileObserver thread.
+ * */
 public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements FilenameFilter {
+    private static final String TAG = "DiskLruCache";
     private File mCachePath;
     private MessageDigest mMsgDigest;
-    private FileObserver mFileObserver;//hold reference
+    private FileObserver mFileObserver; //hold reference
+    private Lock mInitLock;
 
-
-    /**
-     * it's not safe to change file(in other thread) while constructor function is running.
-     */
-    public DiskLruCache(@NonNull File cachePath, @IntRange(from = 0) int maxSize) {
+    public DiskLruCache(@NonNull File cachePath, @IntRange(from = 1) int maxSize) {
         super(maxSize);
         mCachePath = cachePath;
-        if (mCachePath == null)
-            throw new IllegalArgumentException("DiskLruCache cachePath=null");
         if ((!mCachePath.exists() || !mCachePath.isDirectory()) && !mCachePath.mkdirs())
             throw new IllegalArgumentException("DiskLruCache create cachePath failed");
         try {
@@ -35,15 +44,21 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
             throw new IllegalArgumentException("initialize DiskLruCache failed, " + e.getMessage());
         }
 
+        mInitLock = new ReentrantLock();
+        mInitLock.lock();
         mFileObserver = new FileObserver(cachePath.getAbsolutePath(),
                 FileObserver.OPEN | FileObserver.DELETE | FileObserver.MOVED_TO | FileObserver.MOVED_FROM | FileObserver.CLOSE_WRITE | FileObserver.CLOSE_NOWRITE) {
             /**
              * This method is invoked on a special FileObserver thread.
              * */
+            @WorkerThread
             @Override
-            public void onEvent(int event, String path) {
+            public void onEvent(final int event, @Nullable final String path) {
                 if (path == null || !accept(mCachePath, path))
                     return;
+                if (mInitLock != null) {
+                    mInitLock.lock();
+                }
                 switch (event) {
                     case FileObserver.OPEN:
                         remove(path);
@@ -61,45 +76,58 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
                         put(path, info);
                         break;
                 }
+                if (mInitLock != null) {
+                    mInitLock.unlock();
+                    mInitLock = null;
+                }
             }
         };
         mFileObserver.startWatching();
 
         File[] files = mCachePath.listFiles(this);
+        final Map<File, Long> fileLastModified = new HashMap<>();
+        for (File file : files) {
+            fileLastModified.put(file, file.lastModified());
+        }
         Arrays.sort(files, new Comparator<File>() {
             @Override
             public int compare(File o1, File o2) {
-                return (int) (o1.lastModified()-o2.lastModified());
+                return (int) (fileLastModified.get(o1) - fileLastModified.get(o2));
+//                return (int) (o1.lastModified() - o2.lastModified());
             }
         });
         for (File file : files) {
             put(file.getName(), new Info(file, sizeOf(file)));
         }
+
+        mInitLock.unlock();
     }
 
-    public static class Info {
-        Info(File file, int size) {
+    public void release() {
+        mFileObserver.stopWatching();
+    }
+
+    static class Info {
+        Info(@NonNull File file, @IntRange(from = 0) int size) {
             this.file = file;
             this.size = size;
         }
 
-        File file;
-        int size;
+        final File file;
+        final int size;
     }
 
-    /**
-     * this function needs to be thread safety
-     */
+    @AnyThread
     @Override
-    public boolean accept(File dir, String name) {
+    public boolean accept(File dir, @NonNull String name) {
         return new File(dir, name).isFile();
     }
 
-    public File getFile(String key) {
+    public File getFile(@NonNull String key) {
         return getFile(key, null);
     }
 
-    protected File getFile(String key, String suffix) {
+    protected File getFile(@NonNull String key, String suffix) {
         String child = md5(key);
         if (!TextUtils.isEmpty(suffix)) {
             child += "." + suffix;
@@ -108,20 +136,22 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
     }
 
     /**
-     * this function needs to be thread safety
+     * @param file is already checked by {@link #accept(File, String)}
      */
-    protected int sizeOf(File file) {
-        if (file == null || !file.exists())
-            return 0;
+    @AnyThread
+    protected @IntRange(from = 0)
+    int sizeOf(@NonNull File file) {
         return (int) file.length();
     }
 
     @Override
-    protected int sizeOf(String key, Info value) {
+    protected @IntRange(from = 0)
+    int sizeOf(String key, Info value) {
         return value.size;
     }
 
-    public String md5(String raw) {
+    @MainThread
+    public synchronized final String md5(@NonNull String raw) {
         StringBuilder sb = new StringBuilder();
         for (byte b : mMsgDigest.digest(raw.getBytes()))
             sb.append(Integer.toHexString((b & 0xFF) | 0x100).substring(1, 3));

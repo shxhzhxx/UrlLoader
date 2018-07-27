@@ -66,7 +66,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @param maxCacheSize    max disk cache size in bytes
      * @param maximumPoolSize the maximum number of threads to allow in the pool
      */
-    public UrlLoader(@NonNull File cachePath, @IntRange(from = 0) int maxCacheSize, @IntRange(from = 0) final int maximumPoolSize) {
+    public UrlLoader(@NonNull File cachePath, @IntRange(from = 1) int maxCacheSize, @IntRange(from = 0) final int maximumPoolSize) {
         super(new ExecutorFactory() {
             @Override
             public ExecutorService newExecutor() {
