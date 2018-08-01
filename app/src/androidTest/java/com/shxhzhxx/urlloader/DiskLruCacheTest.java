@@ -48,21 +48,20 @@ public class DiskLruCacheTest extends BaseTest {
 
     @Test
     public void test() {
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "initTest: " + i);
             deletePath(cachePath);
-            initTest(1000);
+            initTest((int) (2000 * Math.random()));
         }
-
 
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "lruTest: " + i);
             deletePath(cachePath);
-            lruTest(100);
+            lruTest((int) (2000 * Math.random()));
         }
     }
 
-    public void initTest(final int scale) {
+    private void initTest(final int scale) {
         Assert.assertTrue(runTest(() -> {
             try {
                 for (int i = 0; i < scale; ++i) {
@@ -86,13 +85,24 @@ public class DiskLruCacheTest extends BaseTest {
             addThread.interrupt();
             editThread.interrupt();
 
-            mHandler.postDelayed(() -> {
-                int size = 0;
-                for (File file : cachePath.listFiles())
-                    size += file.length();
-                result(diskLruCache.size() == size);
-                diskLruCache.release();
-            }, scale / 5);
+            Runnable run=new Runnable() {
+                @Override
+                public void run() {
+                    int size = 0;
+                    for (File file : cachePath.listFiles())
+                        size += file.length();
+                    int cacheSize = diskLruCache.size();
+                    if (cacheSize == size) {
+                        diskLruCache.release();
+                        result(true);
+                    }else {
+                        Log.d(TAG, "size: " + size);
+                        Log.d(TAG, "cacheSize: " + cacheSize);
+                        mHandler.postDelayed(this,scale/10);
+                    }
+                }
+            };
+            mHandler.postDelayed(run,scale/10);
         }));
     }
 
@@ -141,9 +151,12 @@ public class DiskLruCacheTest extends BaseTest {
     }
 
     public void lruTest(final int scale) {
+        if (scale <= 0)
+            return;
+
+        int max = scale * 1024;
+        DiskLruCache diskLruCache = new DiskLruCache(cachePath, max);
         Assert.assertTrue(runTest(() -> {
-            int max = scale * 1024;
-            DiskLruCache diskLruCache = new DiskLruCache(cachePath, max);
             List<Pair<String, Integer>> sizes = new ArrayList<>();
             try {
                 for (int i = 0; i < 3 * scale; ++i) {
@@ -172,17 +185,44 @@ public class DiskLruCacheTest extends BaseTest {
                 result(false);
                 return;
             }
-            mHandler.postDelayed(() -> {
-                int size = 0;
-                Collections.reverse(sizes);
-                for (int i = 0; i < 3 * scale; ++i) {
-                    if (size + sizes.get(i).second > max)
-                        break;
-                    size += sizes.get(i).second;
+            int size = 0;
+            Collections.reverse(sizes);
+            for (int i = 0; i < 3 * scale; ++i) {
+                if (size + sizes.get(i).second > max)
+                    break;
+                size += sizes.get(i).second;
+            }
+            final int expectedSize = size;
+            Runnable run = new Runnable() {
+                @Override
+                public void run() {
+                    int cacheSize = diskLruCache.size();
+                    int actualSize = 0;
+                    for (File file : cachePath.listFiles()) {
+                        actualSize += (int) file.length();
+                    }
+                    if (expectedSize == cacheSize && expectedSize == actualSize) {
+                        result(true);
+                    } else {
+                        Log.d(TAG, "expectedSize: "+expectedSize);
+                        Log.d(TAG, "cacheSize: "+cacheSize);
+                        Log.d(TAG, "actualSize: "+actualSize);
+                        mHandler.postDelayed(this, scale/5);
+                    }
                 }
-                result(size == diskLruCache.size());
-                diskLruCache.release();
-            }, scale / 2);
+            };
+            mHandler.postDelayed(run, scale/5);
+        }));
+        Assert.assertTrue(runTest(() -> {
+            diskLruCache.evictAll();
+            int size = diskLruCache.size();
+            int length = cachePath.listFiles().length;
+            if(size!=0 || length!=0){
+                Log.d(TAG, "size: " + size);
+                Log.d(TAG, "length: " + length);
+            }
+            diskLruCache.release();
+            result(size == 0 && length == 0);
         }));
     }
 

@@ -24,10 +24,14 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Note: {@link #size()} is not guaranteed to be precisely.
+ * <p>
  * The observer of cachePath get callback on a special FileObserver thread.
- * */
+ * <p>
+ * If a DiskLruCache is garbage collected, it
+ * will stop control cache size.  To ensure you keep controlling cache size, you must
+ * keep a reference to the DiskLruCache instance from some other live object.
+ */
 public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements FilenameFilter {
-    private static final String TAG = "DiskLruCache";
     private File mCachePath;
     private MessageDigest mMsgDigest;
     private FileObserver mFileObserver; //hold reference
@@ -60,17 +64,17 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
                     mInitLock.lock();
                 }
                 switch (event) {
-                    case FileObserver.OPEN:
+                    case FileObserver.MOVED_FROM:
+                    case FileObserver.DELETE:
                         remove(path);
                         break;
-                    case FileObserver.DELETE:
+                    case FileObserver.OPEN:
                     case FileObserver.MOVED_TO:
-                    case FileObserver.MOVED_FROM:
                     case FileObserver.CLOSE_WRITE:
                     case FileObserver.CLOSE_NOWRITE:
                         File file = new File(mCachePath, path);
                         Info info = new Info(file, sizeOf(file));
-                        if (event == FileObserver.CLOSE_NOWRITE) {//read
+                        if (event == FileObserver.CLOSE_NOWRITE || event == FileObserver.OPEN) {//read
                             file.setLastModified(System.currentTimeMillis());
                         }
                         put(path, info);
@@ -93,7 +97,6 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
             @Override
             public int compare(File o1, File o2) {
                 return (int) (fileLastModified.get(o1) - fileLastModified.get(o2));
-//                return (int) (o1.lastModified() - o2.lastModified());
             }
         });
         for (File file : files) {
@@ -103,6 +106,10 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         mInitLock.unlock();
     }
 
+    /**
+     * If a DiskLruCache is garbage collected, it will stop control cache size.
+     * you can actively promote it by calling this function.
+     */
     public void release() {
         mFileObserver.stopWatching();
     }

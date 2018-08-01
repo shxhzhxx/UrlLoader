@@ -276,7 +276,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
          * https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
          */
         private boolean mainFunc() {
-            Log.d(TAG, "mainFunc: ");
             if (!mHeaderCache.exists() || !mDataCache.exists())
                 return download();
             Headers.Builder builder = new Headers.Builder();
@@ -367,7 +366,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         }
 
         private boolean download() {
-            Log.d(TAG, "download: ");
             if (!resetCache())
                 return false;
             Request.Builder request;
