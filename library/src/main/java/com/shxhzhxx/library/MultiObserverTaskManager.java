@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public abstract class MultiObserverTaskManager<T> {
-    protected final String TAG = this.getClass().getSimpleName();
+    private final String TAG = this.getClass().getSimpleName();
     private Handler mMainHandler = new Handler(Looper.getMainLooper());
     private ExecutorService mThreadPool;
     private Thread mMainThread = Looper.getMainLooper().getThread();

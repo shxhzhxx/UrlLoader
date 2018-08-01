@@ -31,6 +31,7 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserver> {
+    private final String TAG = this.getClass().getSimpleName();
     private static final long UPDATE_TIME_INTERVAL = 500;
     private static final int MAX_BUF_SIZE = 8192;
     private static final int MIN_BUF_SIZE = 512;
