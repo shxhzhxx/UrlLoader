@@ -60,7 +60,7 @@ DownloadManager.java
 
 ```java
 public abstract class DownloadManager {
-    private static UrlLoader mInstance;
+    private static volatile UrlLoader mInstance;
 
     public static void init(@NonNull Context context) {
         mInstance = new UrlLoader(context.getCacheDir(), 300 * 1024 * 1024, 5);

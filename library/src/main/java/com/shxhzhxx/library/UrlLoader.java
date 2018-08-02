@@ -15,11 +15,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.CacheControl;
@@ -67,15 +64,8 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @param maxCacheSize    max disk cache size in bytes
      * @param maximumPoolSize the maximum number of threads to allow in the pool
      */
-    public UrlLoader(@NonNull File cachePath, @IntRange(from = 1) int maxCacheSize, @IntRange(from = 0) final int maximumPoolSize) {
-        super(new ExecutorFactory() {
-            @Override
-            public ExecutorService newExecutor() {
-                ThreadPoolExecutor executor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-                executor.allowCoreThreadTimeOut(true);
-                return executor;
-            }
-        });
+    public UrlLoader(@NonNull File cachePath, @IntRange(from = 1) int maxCacheSize, @IntRange(from = 1) final int maximumPoolSize) {
+        super(maximumPoolSize);
         mCache = new UrlLoaderCache(cachePath, maxCacheSize);
         mOkHttpClient = new OkHttpClient.Builder()
                 .readTimeout(0, TimeUnit.SECONDS)
@@ -303,7 +293,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             try {
                 response = call.execute();
             } catch (IOException e) {
-                Log.e(TAG, "execute IOException:" + e.getMessage());
+                Log.e(TAG, "execute IOException: " + e.getMessage());
                 return false;
             }
             ResponseBody body = response.body();
@@ -323,7 +313,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             } else if (response.isSuccessful()) {
                 return resetCache() && readResponse(response);
             } else {
-                Log.e(TAG, "http code:" + response.code());
+                Log.e(TAG, "http code: " + response.code());
                 body.close();
                 return false;
             }
@@ -358,12 +348,12 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             try {
                 response = call.execute();
             } catch (IOException e) {
-                Log.e(TAG, "execute IOException:" + e.getMessage());
+                Log.e(TAG, "execute IOException: " + e.getMessage());
                 return false;
             }
             if (isCanceled() || !response.isSuccessful()) {
                 if (!response.isSuccessful())
-                    Log.e(TAG, "http code:" + response.code());
+                    Log.e(TAG, "http code: " + response.code());
                 ResponseBody body = response.body();
                 assert body != null;
                 body.close();
@@ -393,7 +383,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             try {
                 response = call.execute();
             } catch (IOException e) {
-                Log.e(TAG, "execute IOException:" + e.getMessage());
+                Log.e(TAG, "execute IOException: " + e.getMessage());
                 return false;
             }
             ResponseBody body = response.body();
@@ -412,7 +402,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             } else if (response.isSuccessful()) {
                 return resetCache() && readResponse(response);
             } else {
-                Log.e(TAG, "http code:" + response.code());
+                Log.e(TAG, "http code: " + response.code());
                 body.close();
                 return false;
             }

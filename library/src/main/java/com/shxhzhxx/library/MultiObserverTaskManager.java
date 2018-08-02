@@ -2,6 +2,7 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.support.annotation.IntRange;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
@@ -15,6 +16,9 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public abstract class MultiObserverTaskManager<T> {
     private final String TAG = this.getClass().getSimpleName();
@@ -37,6 +41,17 @@ public abstract class MultiObserverTaskManager<T> {
             @Override
             public ExecutorService newExecutor() {
                 return Executors.newCachedThreadPool();
+            }
+        });
+    }
+
+    public MultiObserverTaskManager(@IntRange(from = 1) final int maximumPoolSize) {
+        this(new ExecutorFactory() {
+            @Override
+            public ExecutorService newExecutor() {
+                ThreadPoolExecutor executor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+                executor.allowCoreThreadTimeOut(true);
+                return executor;
             }
         });
     }
@@ -150,7 +165,7 @@ public abstract class MultiObserverTaskManager<T> {
                 doInBackground();
                 runResult(mPostResult);
             } catch (Exception e) {
-                Log.e(TAG, "Unhandled exception occurs in doInBackground :" + e.getMessage());
+                Log.e(TAG, "Unhandled exception occurs in doInBackground: " + e.getMessage());
                 runResult(null);
             }
         }
