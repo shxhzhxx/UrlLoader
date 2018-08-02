@@ -23,6 +23,12 @@ public class UrlLoaderCache extends DiskLruCache {
         return (int) (file.length() + findHeaderCache(file).length());
     }
 
+    @Override
+    protected void onDelete(Info info) {
+        findHeaderCache(info.file).delete();
+        info.file.delete();
+    }
+
     public File getHeaderCache(String url) {
         return getFile(url, mSuffixHeader);
     }
@@ -31,16 +37,13 @@ public class UrlLoaderCache extends DiskLruCache {
         return getFile(url, mSuffixData);
     }
 
+    public boolean clearCache(String url) {
+        return remove(getDataCache(url).getName()) != null;
+    }
+
     private File findHeaderCache(File dataCache) {
         String absolutePath = dataCache.getAbsolutePath();
         return new File(absolutePath.substring(0, absolutePath.length() - mSuffixData.length()) + mSuffixHeader);
     }
 
-    @Override
-    protected void entryRemoved(boolean evicted, String key, Info oldValue, Info newValue) {
-        if (evicted) {
-            findHeaderCache(oldValue.file).delete();
-            oldValue.file.delete();
-        }
-    }
 }

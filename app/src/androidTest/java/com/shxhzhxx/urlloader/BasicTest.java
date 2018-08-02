@@ -3,7 +3,7 @@ package com.shxhzhxx.urlloader;
 import android.os.Handler;
 import android.os.Looper;
 
-public abstract class BaseTest {
+public abstract class BasicTest {
     protected Handler mHandler = new Handler(Looper.getMainLooper());
     private final Object mLock = new Object();
     private Thread mTestThread;

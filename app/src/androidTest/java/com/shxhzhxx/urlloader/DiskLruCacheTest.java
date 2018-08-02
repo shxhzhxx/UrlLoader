@@ -25,7 +25,7 @@ import java.util.Collections;
 import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
-public class DiskLruCacheTest extends BaseTest {
+public class DiskLruCacheTest extends BasicTest {
     private static final String TAG = "DiskLruCacheTest";
 
     private File cachePath;
@@ -207,11 +207,11 @@ public class DiskLruCacheTest extends BaseTest {
                         Log.d(TAG, "expectedSize: "+expectedSize);
                         Log.d(TAG, "cacheSize: "+cacheSize);
                         Log.d(TAG, "actualSize: "+actualSize);
-                        mHandler.postDelayed(this, scale/5);
+                        mHandler.postDelayed(this, scale/3);
                     }
                 }
             };
-            mHandler.postDelayed(run, scale/5);
+            mHandler.postDelayed(run, scale/3);
         }));
         Assert.assertTrue(runTest(() -> {
             diskLruCache.evictAll();

@@ -165,9 +165,13 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         return sb.toString();
     }
 
+    protected void onDelete(Info info){
+        info.file.delete();
+    }
+
     @Override
-    protected void entryRemoved(boolean evicted, String key, Info oldValue, Info newValue) {
-        if (evicted)
-            oldValue.file.delete();
+    protected final void entryRemoved(boolean evicted, String key, Info oldValue, Info newValue) {
+        if (newValue == null)
+            onDelete(oldValue);
     }
 }

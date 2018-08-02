@@ -104,13 +104,6 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return load(url, null);
     }
 
-    public boolean deleteCacheFile(String url) {
-        if (isRunning(url))
-            return false;
-        File headerCache = getHeaderCache(url), dataCache = getDataCache(url);
-        return (!headerCache.exists() || headerCache.delete()) && (!dataCache.exists() || dataCache.delete());
-    }
-
     public File getHeaderCache(String url) {
         return mCache.getHeaderCache(url == null ? "" : url);
     }
@@ -153,9 +146,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
     }
 
     public boolean clearCache(String url) {
-        File headerCache = getHeaderCache(url);
-        File dataCache = getDataCache(url);
-        return !isRunning(url) && (!headerCache.exists() || headerCache.delete()) && (!dataCache.exists() || dataCache.delete());
+        return !isRunning(url) && mCache.clearCache(url);
     }
 
     public long cacheSize() {
@@ -186,7 +177,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         }
 
         @Override
-        protected void onCanceledBeforeStart() {
+        protected void onCanceled() {
             for (ProgressObserver observer : getObservers()) {
                 if (observer != null)
                     observer.onCanceled();
@@ -206,16 +197,9 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             setPostResult(new Runnable() {
                 @Override
                 public void run() {
-                    if (isCanceled()) {
-                        for (ProgressObserver observer : getObservers()) {
-                            if (observer != null)
-                                observer.onCanceled();
-                        }
-                    } else {
-                        for (ProgressObserver observer : getObservers()) {
-                            if (observer != null)
-                                observer.onComplete(mDataCache);
-                        }
+                    for (ProgressObserver observer : getObservers()) {
+                        if (observer != null)
+                            observer.onComplete(mDataCache);
                     }
                 }
             });
@@ -225,16 +209,9 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             setPostResult(new Runnable() {
                 @Override
                 public void run() {
-                    if (isCanceled()) {
-                        for (ProgressObserver observer : getObservers()) {
-                            if (observer != null)
-                                observer.onCanceled();
-                        }
-                    } else {
-                        for (ProgressObserver observer : getObservers()) {
-                            if (observer != null)
-                                observer.onFailed();
-                        }
+                    for (ProgressObserver observer : getObservers()) {
+                        if (observer != null)
+                            observer.onFailed();
                     }
                 }
             });

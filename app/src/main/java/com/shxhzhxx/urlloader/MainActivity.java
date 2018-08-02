@@ -2,6 +2,7 @@ package com.shxhzhxx.urlloader;
 
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
@@ -58,6 +59,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
             case R.id.cancel:
                 DownloadManager.getInstance().cancel(URL_BIG);
+                Log.d(TAG, "onClick: cancel");
                 break;
             case R.id.clear:
                 DownloadManager.getInstance().clearCache(URL_BIG);

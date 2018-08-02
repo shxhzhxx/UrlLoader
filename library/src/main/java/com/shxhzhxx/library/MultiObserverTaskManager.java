@@ -2,14 +2,16 @@ package com.shxhzhxx.library;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -39,7 +41,6 @@ public abstract class MultiObserverTaskManager<T> {
         });
     }
 
-
     public abstract class TaskBuilder {
         public abstract Task build();
     }
@@ -48,16 +49,16 @@ public abstract class MultiObserverTaskManager<T> {
      * join a task or start a new task.
      *
      * @param key      should not be null nor empty string
-     * @param observer may be null.
+     * @param observer may be null. Identical instance can be passed multi times.
      * @param builder  builder
      * @return non-negative task id , or -1 if failed
      */
-    protected int start(String key, T observer, TaskBuilder builder) {
+    protected final int start(String key, @Nullable T observer, TaskBuilder builder) {
         if (TextUtils.isEmpty(key) || builder == null) {
             return -1;
         }
         checkThread();
-        int id = getObserverId();
+        int id = generateObserverId();
         Task task = mKeyTaskMap.get(key);
         if (task == null) {
             task = builder.build();
@@ -67,7 +68,7 @@ public abstract class MultiObserverTaskManager<T> {
         return id;
     }
 
-    public boolean isRunning(String key) {
+    public final boolean isRunning(String key) {
         checkThread();
         return !TextUtils.isEmpty(key) && mKeyTaskMap.get(key) != null;
     }
@@ -76,7 +77,7 @@ public abstract class MultiObserverTaskManager<T> {
      * remove a observer marked by id,
      * removed observer will not receive callback.
      */
-    public boolean cancel(int id) {
+    public final boolean cancel(int id) {
         checkThread();
         Task task = mIdTaskMap.get(id);
         if (task != null) {
@@ -91,7 +92,7 @@ public abstract class MultiObserverTaskManager<T> {
      * cancel a task by marked by key.
      * all observer may receive a callback (depend on implementation)
      */
-    public boolean cancel(String key) {
+    public final boolean cancel(String key) {
         if (TextUtils.isEmpty(key)) {
             return false;
         }
@@ -104,13 +105,13 @@ public abstract class MultiObserverTaskManager<T> {
         return false;
     }
 
-    public void cancelAll() {
+    public final void cancelAll() {
         for (String key : new HashSet<>(mKeyTaskMap.keySet())) {
             cancel(key);
         }
     }
 
-    private int getObserverId() {
+    private int generateObserverId() {
         for (int id = 0; ; ++id)
             if (mIdTaskMap.indexOfKey(id) < 0)
                 return id;
@@ -125,14 +126,13 @@ public abstract class MultiObserverTaskManager<T> {
     public abstract class Task implements Runnable {
         private SparseArray<T> mObserverMap;
         private final String mKey;
-        private volatile boolean mCanceled, mStarted;
+        private volatile boolean mCanceled;
         private volatile Runnable mPostResult;
         private Future mFuture;
 
         public Task(String key) {
             mKey = key;
             mCanceled = false;
-            mStarted = false;
             mPostResult = null;
             mObserverMap = new SparseArray<>();
         }
@@ -144,27 +144,24 @@ public abstract class MultiObserverTaskManager<T> {
 
         @Override
         public final void run() {
-            synchronized (Task.this) {
-                if (isCanceled())
-                    return;
-                mStarted = true;
-            }
+            if (isCanceled())
+                return;
             try {
                 doInBackground();
+                runResult(mPostResult);
             } catch (Exception e) {
                 Log.e(TAG, "Unhandled exception occurs in doInBackground :" + e.getMessage());
-                setPostResult(null);
+                runResult(null);
             }
-            runResult();
         }
 
-        private void runResult() {
+        private void runResult(final Runnable result) {
             mMainHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    if (!isCanceled()) //canceled task has already been cleared, redo this may lead new task with same key cleared by accident.
-                        clear();
-                    Runnable result = mPostResult; // mPostResult can be changed by any thread.
+                    if (isCanceled()) //canceled task has already been cleared, redo clear() may lead new task with same key cleared by accident.
+                        return;
+                    clear();
                     if (result != null) {
                         result.run();
                     }
@@ -172,20 +169,22 @@ public abstract class MultiObserverTaskManager<T> {
             });
         }
 
-        protected final Set<T> getObservers() {
-            Set<T> set = new HashSet<>();
+        /**
+         * observer maybe null. may contains identical instance multi times.
+         */
+        protected final Iterable<T> getObservers() {
+            List<T> list = new ArrayList<>();
             for (int i = 0; i < mObserverMap.size(); ++i)
-                set.add(mObserverMap.valueAt(i));
-            return set;
+                list.add(mObserverMap.valueAt(i));
+            return list;
         }
 
         /**
          * although canceled status can be checked by any thread,there is no guarantee that shortly after the last observer has unregistered itself
-         * or after the task has been canceled,this method will always return true unless it invoked by main thread.
+         * or after the task has been canceled,this method will always return true unless it invoked by main thread. (cancel is not a atomic operation)
          * actually, set canceled status to true is almost the last move when cancel a task. {@link #cancel()}
          * <p>
          * check this method in worker thread to get a hint ,so that you can stop background work appropriately .
-         * always check this method in main thread before you return the result.
          */
         protected boolean isCanceled() {
             return mCanceled;
@@ -201,25 +200,18 @@ public abstract class MultiObserverTaskManager<T> {
          * 1.   all observer unregistered ,which {@link #getObservers()} return an empty list;
          * 2.   {@link #cancel(String)} been called, which {@link #getObservers()} return a list contains current observers.
          * <p>
-         * either {@link #onCanceled()} or {@link #onCanceledBeforeStart()} will be invoked, avoid running time-consuming tasks in these methods.
+         * {@link #onCanceled()} will be invoked, avoid running time-consuming tasks in these methods.
          */
         private void cancel() {
-            synchronized (Task.this) {
-                mCanceled = true;
-            }
+            mCanceled = true;
             mFuture.cancel(true);
-            if (mStarted) {
-                onCanceled();
-            } else {
-                onCanceledBeforeStart();
-            }
+            onCanceled();
         }
 
+        /**
+         * invoked when this task is canceled, in main thread.
+         */
         protected void onCanceled() {
-
-        }
-
-        protected void onCanceledBeforeStart() {
 
         }
 
@@ -230,10 +222,11 @@ public abstract class MultiObserverTaskManager<T> {
         protected abstract void doInBackground();
 
         /**
-         * pass whatever you want to execute (in main thread) after {@link #doInBackground()} has finished.
+         * pass whatever you want to execute (in main thread) after {@link #doInBackground()} has successfully finished (without cancel nor exception).
          * typically, you should call this method inside {@link #doInBackground()} as the result of task.
-         * if you want to inform user when task is canceled before start ,which {@link #doInBackground()} will never been invoked (neither do the runnable you passed),
-         * override {@link #onCanceledBeforeStart()} and do whatever you want.
+         * <p>
+         * if this task is canceled, the runnable will not been invoked,
+         * override {@link #onCanceled()} instead in this case.
          * <p>
          * the reason that why you should pass result by this method instead of doing it yourself is,
          * you never know when is safe to return result to observers.
@@ -256,9 +249,9 @@ public abstract class MultiObserverTaskManager<T> {
 
         /**
          * @param id       task id
-         * @param observer may be null. {@link #getObservers()} will return whatever this param is.
+         * @param observer {@link #getObservers()} will return whatever this param is.
          */
-        final void registerObserver(int id, T observer) {
+        final void registerObserver(int id, @Nullable T observer) {
             mObserverMap.put(id, observer);
             mIdTaskMap.put(id, this);
         }
