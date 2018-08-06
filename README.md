@@ -23,7 +23,7 @@ Add it in your root build.gradle at the end of repositories:
 
 ```
 	dependencies {
-	        implementation 'com.github.shxhzhxx:UrlLoader:1.1.4'
+	        implementation 'com.github.shxhzhxx:UrlLoader:1.1.5'
 	}
 ```
 

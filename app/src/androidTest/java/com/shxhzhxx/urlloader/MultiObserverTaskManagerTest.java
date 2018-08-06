@@ -9,7 +9,11 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -27,6 +31,11 @@ public class MultiObserverTaskManagerTest extends BasicTest {
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "multiObserverTest: " + i);
             multiObserverTest();
+        }
+
+        for (int i = 0; i < 100; ++i) {
+            Log.d(TAG, "tagTest: " + i);
+            tagTest((int) (1000 * Math.random()));
         }
     }
 
@@ -47,7 +56,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                 }
 
                 @Override
-                public void onComplete(Object result) {
+                public void onComplete(String key) {
                     result(false);
                 }
             });
@@ -66,8 +75,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                 }
 
                 @Override
-                public void onComplete(Object result) {
-                    Log.d(TAG, "onComplete: ");
+                public void onComplete(String key) {
                     result(!canceled.get());
                 }
             });
@@ -91,10 +99,10 @@ public class MultiObserverTaskManagerTest extends BasicTest {
 
             TestManager.TestObserver observer = new TestManager.TestObserver() {
                 @Override
-                public void onComplete(Object result) {
+                public void onComplete(String key) {
                     if (object.get() == null) {
-                        object.set(result);
-                    } else if (object.get() != result) {
+                        object.set(key);
+                    } else if (object.get() != key) {
                         result(false);
                         return;
                     }
@@ -109,7 +117,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
 
                 @Override
                 public void onCanceled() {
-                    result(false);
+                    count.decrementAndGet();
                 }
             };
             for (int i = 0; i < scale; ++i) {
@@ -119,12 +127,125 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                 } else {
                     ids.add(new Pair<>(manager.exe(key, null), null));
                 }
-
                 if (Math.random() < 0.2) {
                     Pair<Integer, TestManager.TestObserver> pair = ids.remove((int) (Math.random() * ids.size()));
                     manager.cancel(pair.first);
-                    if (pair.second != null)
-                        count.decrementAndGet();
+                    if (!manager.isRunning(key)) {
+                        mHandler.post(() -> result(count.get() == 0));
+                        break;
+                    }
+                }
+            }
+        }));
+    }
+
+    private void tagTest(final int scale) {
+        Assert.assertTrue(runTest(() -> {
+            TestManager manager = new TestManager();
+            List<String> keys = new ArrayList<>();
+            List<String> tags = new ArrayList<>();
+            Map<String, Set<TestManager.TestObserver>> keyOb = new HashMap<>();
+            Map<String, Set<TestManager.TestObserver>> tagOb = new HashMap<>();
+            Map<TestManager.TestObserver, Pair<String, String>> obKeyTag = new HashMap<>();
+
+            for (int i = 0; i < scale; ++i) {
+                //check
+                for (String tag : tags) {
+                    for (TestManager.TestObserver ob : tagOb.get(tag)) {
+                        Pair<String, String> keyTag = obKeyTag.get(ob);
+                        Assert.assertTrue(tag.equals(keyTag.second));
+                        Assert.assertTrue(keys.contains(keyTag.first));
+                    }
+                }
+                for (String key : keys) {
+                    for (TestManager.TestObserver ob : keyOb.get(key)) {
+                        Pair<String, String> keyTag = obKeyTag.get(ob);
+                        Assert.assertTrue(key.equals(keyTag.first));
+                        Assert.assertTrue(tags.contains(keyTag.second));
+                    }
+                }
+
+                String key;
+                if (Math.random() * keys.size() <= ((double) i / 10)) {
+                    key = "key" + i;
+                    keys.add(key);
+                    keyOb.put(key, new HashSet<>());
+                } else {
+                    key = keys.get((int) (Math.random() * keys.size()));
+                }
+                String tag;
+                if (Math.random() * tags.size() <= ((double) i / 20)) {
+                    tag = "tag" + i;
+                    tags.add(tag);
+                    tagOb.put(tag, new HashSet<>());
+                } else {
+                    tag = tags.get((int) (Math.random() * tags.size()));
+                }
+                TestManager.TestObserver ob = new TestManager.TestObserver() {
+                    @Override
+                    public void onCanceled() {
+                        onFinally();
+                    }
+
+                    @Override
+                    public void onComplete(String key) {
+                        onFinally();
+                    }
+
+                    private void onFinally() {
+                        Pair<String, String> keyTag = obKeyTag.remove(this);
+
+                        String key = keyTag.first;
+                        Set<TestManager.TestObserver> obs = keyOb.get(key);
+                        obs.remove(this);
+                        if (obs.isEmpty()) {
+                            keyOb.remove(key);
+                            keys.remove(key);
+                        }
+
+                        String tag = keyTag.second;
+                        obs = tagOb.get(tag);
+                        obs.remove(this);
+                        if (obs.isEmpty()) {
+                            tagOb.remove(tag);
+                            tags.remove(tag);
+                        }
+                        check();
+                    }
+
+                    private void check() {
+                        if (obKeyTag.isEmpty()) {
+                            if (keys.isEmpty() && tags.isEmpty() && tagOb.isEmpty()) {
+                                result(true);
+                            } else {
+                                Log.d(TAG, "keys: " + keys.size());
+                                Log.d(TAG, "tags: " + tags.size());
+                                Log.d(TAG, "tagOb: " + tagOb.size());
+                                result(false);
+                            }
+                        }
+                    }
+                };
+                tagOb.get(tag).add(ob);
+                keyOb.get(key).add(ob);
+                obKeyTag.put(ob, new Pair<>(key, tag));
+                manager.exe(key, tag, ob);
+
+                if (Math.random() * keys.size() > 5) {
+                    int index = (int) (Math.random() * keys.size());
+                    key = keys.get(index);
+                    Assert.assertTrue(manager.cancel(key));
+                }
+                if (Math.random() * tags.size() > 3) {
+                    int index = (int) (Math.random() * tags.size());
+                    tag = tags.get(index);
+                    Assert.assertTrue(manager.cancelByTag(tag));
+                }
+
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
         }));
@@ -132,15 +253,15 @@ public class MultiObserverTaskManagerTest extends BasicTest {
 
     private static class TestManager extends MultiObserverTaskManager<TestManager.TestObserver> {
         static class TestObserver {
-            public void onComplete(Object result) {
+            public void onComplete(String key) {
             }
 
             public void onCanceled() {
             }
         }
 
-        public int exe(String key, TestObserver observer) {
-            return start(key, observer, new TaskBuilder() {
+        public int exe(String key, String tag, TestObserver observer) {
+            return start(key, tag, observer, new TaskBuilder() {
                 @Override
                 public Task build() {
                     return new TestTask(key);
@@ -148,16 +269,31 @@ public class MultiObserverTaskManagerTest extends BasicTest {
             });
         }
 
+        public int exe(String key, TestObserver observer) {
+            return exe(key,null,observer);
+        }
+
         class TestTask extends Task {
-            public TestTask(String key) {
+            String mKey;
+
+            TestTask(String key) {
                 super(key);
+                mKey = key;
             }
 
             @Override
             protected void onCanceled() {
                 for (TestObserver observer : getObservers()) {
-                    if (observer != null)
+                    if (observer != null) {
                         observer.onCanceled();
+                    }
+                }
+            }
+
+            @Override
+            protected void onObserverUnregistered(TestObserver observer) {
+                if (observer != null) {
+                    observer.onCanceled();
                 }
             }
 
@@ -173,10 +309,9 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                     }
                 }
                 setPostResult(() -> {
-                    Object result = new Object();
                     for (TestObserver observer : getObservers()) {
                         if (observer != null)
-                            observer.onComplete(result);
+                            observer.onComplete(mKey);
                     }
                 });
             }

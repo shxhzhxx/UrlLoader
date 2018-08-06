@@ -82,7 +82,11 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @return non-negative download id , or -1 if failed
      */
     public int load(final String url, @Nullable ProgressObserver observer) {
-        return start(url, observer, new TaskBuilder() {
+        return load(url, null, observer);
+    }
+
+    public int load(final String url, String tag, @Nullable ProgressObserver observer) {
+        return start(url, tag, observer, new TaskBuilder() {
             @Override
             public Task build() {
                 return new WorkThread(url);
@@ -172,6 +176,12 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 if (observer != null)
                     observer.onCanceled();
             }
+        }
+
+        @Override
+        protected void onObserverUnregistered(ProgressObserver observer) {
+            if (observer != null)
+                observer.onCanceled();
         }
 
         @Override

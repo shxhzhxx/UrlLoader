@@ -8,11 +8,14 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
 
+import junit.framework.Assert;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -27,6 +30,8 @@ public abstract class MultiObserverTaskManager<T> {
     private Thread mMainThread = Looper.getMainLooper().getThread();
     private Map<String, Task> mKeyTaskMap = new HashMap<>();
     private SparseArray<Task> mIdTaskMap = new SparseArray<>();
+    private Map<String, Set<Integer>> mTagIdsMap = new HashMap<>();
+    private SparseArray<String> mIdTagMap = new SparseArray<>();
 
     public interface ExecutorFactory {
         ExecutorService newExecutor();
@@ -64,11 +69,12 @@ public abstract class MultiObserverTaskManager<T> {
      * join a task or start a new task.
      *
      * @param key      should not be null nor empty string
+     * @param tag      may be null. group the requests so that you can easily cancel them by {@link #cancelByTag(String)}
      * @param observer may be null. Identical instance can be passed multi times.
      * @param builder  builder
-     * @return non-negative task id , or -1 if failed
+     * @return non-negative task id , or -1 if failed. this id may be reused after task is finished or canceled or observer is unregistered.
      */
-    protected final int start(String key, @Nullable T observer, TaskBuilder builder) {
+    protected final int start(String key, @Nullable String tag, @Nullable T observer, TaskBuilder builder) {
         if (TextUtils.isEmpty(key) || builder == null) {
             return -1;
         }
@@ -80,7 +86,31 @@ public abstract class MultiObserverTaskManager<T> {
             task.start();
         }
         task.registerObserver(id, observer);
+
+        if (!TextUtils.isEmpty(tag)) {
+            mIdTagMap.put(id, tag);
+            Set<Integer> ids = mTagIdsMap.get(tag);
+            if (ids == null) {
+                ids = new HashSet<>();
+                mTagIdsMap.put(tag, ids);
+            }
+            ids.add(id);
+        }
         return id;
+    }
+
+
+    public final boolean cancelByTag(String tag) {
+        checkThread();
+        Set<Integer> ids = mTagIdsMap.get(tag);
+        if (ids == null)
+            return false;
+        boolean result = true;
+        ids = new HashSet<>(ids);//clone
+        for (int id : ids) {
+            result = cancel(id) && result;
+        }
+        return result;
     }
 
     public final boolean isRunning(String key) {
@@ -104,7 +134,7 @@ public abstract class MultiObserverTaskManager<T> {
     }
 
     /**
-     * cancel a task by marked by key.
+     * cancel a task marked by key.
      * all observer may receive a callback (depend on implementation)
      */
     public final boolean cancel(String key) {
@@ -258,8 +288,10 @@ public abstract class MultiObserverTaskManager<T> {
          */
         private void clear() {
             mKeyTaskMap.remove(mKey);
-            for (int i = 0; i < mObserverMap.size(); ++i)
+            for (int i = 0; i < mObserverMap.size(); ++i) {
                 mIdTaskMap.remove(mObserverMap.keyAt(i));
+                removeTagId(mObserverMap.keyAt(i));
+            }
         }
 
         /**
@@ -271,9 +303,24 @@ public abstract class MultiObserverTaskManager<T> {
             mIdTaskMap.put(id, this);
         }
 
-        final void unregisterObserver(int id) {
+        /**
+         * Note: task which is canceled by {@link #cancel(String)} or {@link #cancelAll()},
+         * technically its observers haven't been unregistered, and this func will not been invoked.
+         *
+         * @param observer ob canceled by {@link #cancel(int)} and {@link #cancelByTag(String)}
+         */
+        protected void onObserverUnregistered(T observer) {
+
+        }
+
+        protected void unregisterObserver(int id) {
+            removeTagId(id);
             mIdTaskMap.remove(id);
-            mObserverMap.remove(id);
+            int index = mObserverMap.indexOfKey(id);
+            if (index >= 0) {
+                onObserverUnregistered(mObserverMap.valueAt(index));
+                mObserverMap.removeAt(index);
+            }
             if (mObserverMap.size() == 0) {
                 mKeyTaskMap.remove(mKey);
                 cancel();
@@ -283,6 +330,19 @@ public abstract class MultiObserverTaskManager<T> {
         final void unregisterAll() {
             clear();
             cancel();
+        }
+
+        private void removeTagId(int id) {
+            String tag = mIdTagMap.get(id);
+            if (tag == null)
+                return;
+            mIdTagMap.remove(id);
+            Set<Integer> ids = mTagIdsMap.get(tag);
+            Assert.assertTrue(ids != null);
+            Assert.assertTrue(ids.remove(id));
+            if (ids.isEmpty()) {
+                mTagIdsMap.remove(tag);
+            }
         }
     }
 }
