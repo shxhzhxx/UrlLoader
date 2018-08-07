@@ -1,9 +1,9 @@
-package com.shxhzhxx.urlloader;
+package com.shxhzhxx.app;
 
 import android.util.Log;
 import android.util.Pair;
 
-import com.shxhzhxx.library.MultiObserverTaskManager;
+import com.shxhzhxx.urlloader.MultiObserverTaskManager;
 
 import org.junit.Assert;
 import org.junit.Test;

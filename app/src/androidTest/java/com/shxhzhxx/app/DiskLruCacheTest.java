@@ -1,4 +1,4 @@
-package com.shxhzhxx.urlloader;
+package com.shxhzhxx.app;
 
 import android.content.Context;
 import android.support.annotation.NonNull;
@@ -7,7 +7,7 @@ import android.support.test.runner.AndroidJUnit4;
 import android.util.Log;
 import android.util.Pair;
 
-import com.shxhzhxx.library.DiskLruCache;
+import com.shxhzhxx.urlloader.DiskLruCache;
 
 import org.junit.Assert;
 import org.junit.Before;

@@ -1,4 +1,4 @@
-package com.shxhzhxx.urlloader;
+package com.shxhzhxx.app;
 
 import org.junit.Test;
 

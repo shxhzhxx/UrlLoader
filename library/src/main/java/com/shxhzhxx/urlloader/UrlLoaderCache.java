@@ -1,4 +1,4 @@
-package com.shxhzhxx.library;
+package com.shxhzhxx.urlloader;
 
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
