@@ -1,6 +1,8 @@
 # UrlLoader
 Android Http Download Library
 
+https://github.com/shxhzhxx/ImageLoader
+
 
 
 ## Dependency
@@ -23,7 +25,7 @@ Add it in your root build.gradle at the end of repositories:
 
 ```
 	dependencies {
-	        implementation 'com.github.shxhzhxx:UrlLoader:1.1.5'
+	        implementation 'com.github.shxhzhxx:UrlLoader:1.1.8'
 	}
 ```
 
