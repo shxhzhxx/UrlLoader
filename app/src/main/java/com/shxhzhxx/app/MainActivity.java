@@ -9,6 +9,11 @@ import android.widget.TextView;
 import com.shxhzhxx.urlloader.UrlLoader;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
@@ -35,6 +40,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.download:
+                File file=new File(getCacheDir(),"shxhzhxx");
+                try {
+                    file.createNewFile();
+                    file.setLastModified(123456);
+                    Log.d(TAG, "lastModified: "+file.lastModified());
+                    OutputStream os=new FileOutputStream(file);
+                    os.write("fdsafdsa".getBytes());
+                    os.close();
+                    Log.d(TAG, "lastModified: "+file.lastModified());
+                    file.setLastModified(123456);
+                    Log.d(TAG, "lastModified: "+file.lastModified());
+                    InputStream is=new FileInputStream(file);
+                    is.read();
+                    is.close();
+                    Log.d(TAG, "lastModified: "+file.lastModified());
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 DownloadManager.getInstance().load(URL_BIG, new UrlLoader.ProgressObserver() {
                     @Override
                     public void onComplete(File file) {
