@@ -92,7 +92,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
                 return new WorkThread(url);
             }
         });
-        if (-1 == id && observer != null) {
+        if (id < 0 && observer != null) {
             observer.onFailed();
         }
         return id;
