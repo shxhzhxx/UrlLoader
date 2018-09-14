@@ -86,12 +86,16 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
     }
 
     public int load(final String url, String tag, @Nullable ProgressObserver observer) {
-        return start(url, tag, observer, new TaskBuilder() {
+        int id = start(url, tag, observer, new TaskBuilder() {
             @Override
             public Task build() {
                 return new WorkThread(url);
             }
         });
+        if (-1 == id && observer != null) {
+            observer.onFailed();
+        }
+        return id;
     }
 
     public int load(String url) {
