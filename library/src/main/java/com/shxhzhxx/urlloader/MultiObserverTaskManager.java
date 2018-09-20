@@ -16,49 +16,40 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public abstract class MultiObserverTaskManager<T> {
     private final String TAG = this.getClass().getSimpleName();
     private Handler mMainHandler = new Handler(Looper.getMainLooper());
-    private ExecutorService mThreadPool;
+    private ThreadPoolExecutor mThreadPoolExecutor;
     private Thread mMainThread = Looper.getMainLooper().getThread();
     private Map<String, Task> mKeyTaskMap = new HashMap<>();
     private SparseArray<Task> mIdTaskMap = new SparseArray<>();
     private Map<String, Set<Integer>> mTagIdsMap = new HashMap<>();
     private SparseArray<String> mIdTagMap = new SparseArray<>();
 
-    public interface ExecutorFactory {
-        ExecutorService newExecutor();
-    }
-
-    public MultiObserverTaskManager(ExecutorFactory factory) {
-        mThreadPool = factory.newExecutor();
-    }
-
     public MultiObserverTaskManager() {
-        this(new ExecutorFactory() {
-            @Override
-            public ExecutorService newExecutor() {
-                return Executors.newCachedThreadPool();
-            }
-        });
+        mThreadPoolExecutor = new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
     }
 
-    public MultiObserverTaskManager(@IntRange(from = 1) final int maximumPoolSize) {
-        this(new ExecutorFactory() {
-            @Override
-            public ExecutorService newExecutor() {
-                ThreadPoolExecutor executor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-                executor.allowCoreThreadTimeOut(true);
-                return executor;
-            }
-        });
+    public MultiObserverTaskManager(@IntRange(from = 1) int maximumPoolSize) {
+        mThreadPoolExecutor = new ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+        mThreadPoolExecutor.allowCoreThreadTimeOut(true);
+    }
+
+    /**
+     * Only when this instance is constructed by {@link #MultiObserverTaskManager(int)} could use this func to change thread pool size.
+     */
+    public void setMaximumPoolSize(@IntRange(from = 1) int size) {
+        if (mThreadPoolExecutor.getCorePoolSize() == 0)
+            return;
+        mThreadPoolExecutor.setCorePoolSize(size);
+        mThreadPoolExecutor.setMaximumPoolSize(size);
     }
 
     public abstract class TaskBuilder {
@@ -184,7 +175,7 @@ public abstract class MultiObserverTaskManager<T> {
 
         private void start() {
             mKeyTaskMap.put(mKey, this);
-            mFuture = mThreadPool.submit(this);
+            mFuture = mThreadPoolExecutor.submit(this);
         }
 
         @Override

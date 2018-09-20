@@ -1,10 +1,12 @@
 package com.shxhzhxx.urlloader;
 
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.annotation.RequiresApi;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -64,7 +66,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @param maxCacheSize    max disk cache size in bytes
      * @param maximumPoolSize the maximum number of threads to allow in the pool
      */
-    public UrlLoader(@NonNull File cachePath, @IntRange(from = 1) int maxCacheSize, @IntRange(from = 1) final int maximumPoolSize) {
+    public UrlLoader(@NonNull File cachePath, @IntRange(from = 1) int maxCacheSize, @IntRange(from = 1) int maximumPoolSize) {
         super(maximumPoolSize);
         mCache = new UrlLoaderCache(cachePath, maxCacheSize);
         mOkHttpClient = new OkHttpClient.Builder()
@@ -81,7 +83,7 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
      * @param observer observer for download task, nullable.
      * @return non-negative download id , or -1 if failed
      */
-    public int load(final String url, @Nullable ProgressObserver observer) {
+    public int load(String url, @Nullable ProgressObserver observer) {
         return load(url, null, observer);
     }
 
@@ -147,8 +149,13 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         return !isRunning(url) && mCache.clearCache(url);
     }
 
-    public long cacheSize() {
+    public int cacheSize() {
         return mCache.size();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    public void resizeCache(@IntRange(from = 1) int size) {
+        mCache.resize(size);
     }
 
     public void clearCache() {
