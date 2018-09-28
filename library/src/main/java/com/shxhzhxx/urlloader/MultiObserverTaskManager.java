@@ -2,13 +2,12 @@ package com.shxhzhxx.urlloader;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.IntRange;
-import android.support.annotation.Nullable;
+import androidx.annotation.IntRange;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
 
-import junit.framework.Assert;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -329,8 +328,8 @@ public abstract class MultiObserverTaskManager<T> {
                 return;
             mIdTagMap.remove(id);
             Set<Integer> ids = mTagIdsMap.get(tag);
-            Assert.assertTrue(ids != null);
-            Assert.assertTrue(ids.remove(id));
+            assert ids!=null;
+            ids.remove(id);
             if (ids.isEmpty()) {
                 mTagIdsMap.remove(tag);
             }
