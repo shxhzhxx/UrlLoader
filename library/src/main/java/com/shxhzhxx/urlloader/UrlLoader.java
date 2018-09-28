@@ -3,10 +3,6 @@ package com.shxhzhxx.urlloader;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.annotation.IntRange;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -21,6 +17,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import androidx.annotation.IntRange;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import okhttp3.CacheControl;
 import okhttp3.Call;
 import okhttp3.Headers;
@@ -135,7 +135,8 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
         }
         Headers headers = builder.build();
         try {
-            if (dataCache.length() != Long.valueOf(headers.get("Content-Length")))
+            String contentLength = headers.get("Content-Length");
+            if (contentLength == null || dataCache.length() != Long.valueOf(contentLength))
                 return false;
         } catch (NumberFormatException e) {
             return false;
@@ -283,7 +284,10 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
             }
             Headers headers = builder.build();
             try {
-                if (mDataCache.length() != Long.valueOf(headers.get("Content-Length")))
+                String contentLength = headers.get("Content-Length");
+                if (contentLength == null)
+                    return download();
+                if (mDataCache.length() != Long.valueOf(contentLength))
                     return resumeDownload(headers);
             } catch (NumberFormatException e) {
                 return download();

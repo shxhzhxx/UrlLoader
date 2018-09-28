@@ -1,11 +1,6 @@
 package com.shxhzhxx.urlloader;
 
 import android.os.FileObserver;
-import androidx.annotation.AnyThread;
-import androidx.annotation.IntRange;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.WorkerThread;
 import android.text.TextUtils;
 import android.util.LruCache;
 
@@ -19,6 +14,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import androidx.annotation.AnyThread;
+import androidx.annotation.IntRange;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
 
 
 /**
@@ -98,7 +99,10 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         Arrays.sort(files, new Comparator<File>() {
             @Override
             public int compare(File o1, File o2) {
-                return (int) (fileLastModified.get(o1) - fileLastModified.get(o2));
+                Long t1 = fileLastModified.get(o1);
+                Long t2 = fileLastModified.get(o2);
+                assert t1 != null && t2 != null;
+                return (int) (t1 - t2);
             }
         });
         for (File file : files) {
