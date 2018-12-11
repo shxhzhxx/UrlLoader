@@ -27,7 +27,7 @@ android {
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:3.11.0'
-    implementation 'androidx.annotation:annotation:1.0.0-rc01'
+    implementation 'androidx.annotation:annotation:1.0.0'
 }
 
 // 指定编码
