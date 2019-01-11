@@ -7,7 +7,8 @@ import androidx.test.runner.AndroidJUnit4;
 import android.util.Log;
 import android.util.Pair;
 
-import com.shxhzhxx.urlloader.DiskLruCache;
+
+import com.shxhzhxx.urlloader.DiskLruCacheEx;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -25,7 +26,7 @@ import java.util.Collections;
 import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
-public class DiskLruCacheTest extends BasicTest {
+public class DiskLruCacheExTest extends BasicTest {
     private static final String TAG = "DiskLruCacheTest";
 
     private File cachePath;
@@ -81,7 +82,7 @@ public class DiskLruCacheTest extends BasicTest {
             Thread editThread = new EditThread(cachePath, scale);
             editThread.start();
 
-            final DiskLruCache diskLruCache = new DiskLruCache(cachePath, 30 * 1024 * 1024);
+            final DiskLruCacheEx diskLruCache = new DiskLruCacheEx(cachePath, 30 * 1024 * 1024);
             addThread.interrupt();
             editThread.interrupt();
 
@@ -155,7 +156,7 @@ public class DiskLruCacheTest extends BasicTest {
             return;
 
         int max = scale * 1024;
-        DiskLruCache diskLruCache = new DiskLruCache(cachePath, max);
+        DiskLruCacheEx diskLruCache = new DiskLruCacheEx(cachePath, max);
         Assert.assertTrue(runTest(() -> {
             List<Pair<String, Integer>> sizes = new ArrayList<>();
             try {
@@ -204,6 +205,7 @@ public class DiskLruCacheTest extends BasicTest {
                     if (expectedSize == cacheSize && expectedSize == actualSize) {
                         result(true);
                     } else {
+                        Log.d(TAG, "max: " + max);
                         Log.d(TAG, "expectedSize: " + expectedSize);
                         Log.d(TAG, "cacheSize: " + cacheSize);
                         Log.d(TAG, "actualSize: " + actualSize);
