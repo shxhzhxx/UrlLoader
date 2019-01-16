@@ -1,9 +1,6 @@
 package com.shxhzhxx.app;
 
 import android.content.Context;
-import androidx.annotation.NonNull;
-import androidx.test.InstrumentationRegistry;
-import androidx.test.runner.AndroidJUnit4;
 import android.util.Log;
 import android.util.Pair;
 
@@ -23,6 +20,11 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import androidx.annotation.NonNull;
+import androidx.test.InstrumentationRegistry;
+import androidx.test.runner.AndroidJUnit4;
 
 @RunWith(AndroidJUnit4.class)
 public class DiskLruCacheTest extends BasicTest {
@@ -51,13 +53,13 @@ public class DiskLruCacheTest extends BasicTest {
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "initTest: " + i);
             deletePath(cachePath);
-            initTest((int) (2000 * Math.random()));
+            initTest((int) (20 * Math.random()));
         }
 
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "lruTest: " + i);
             deletePath(cachePath);
-            lruTest((int) (2000 * Math.random()));
+            lruTest((int) (20 * Math.random()));
         }
     }
 
@@ -85,6 +87,7 @@ public class DiskLruCacheTest extends BasicTest {
             addThread.interrupt();
             editThread.interrupt();
 
+            AtomicInteger counter = new AtomicInteger(0);
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
@@ -96,9 +99,14 @@ public class DiskLruCacheTest extends BasicTest {
                         diskLruCache.release();
                         result(true);
                     } else {
-                        Log.d(TAG, "size: " + size);
-                        Log.d(TAG, "cacheSize: " + cacheSize);
-                        mHandler.postDelayed(this, scale / 10);
+                        if (counter.addAndGet(1) > 10) {
+                            result(false);
+                        } else {
+                            Log.d(TAG, "size: " + size);
+                            Log.d(TAG, "cacheSize: " + cacheSize);
+                            mHandler.postDelayed(this, Math.max(150, scale / 10));
+                            Thread.yield();
+                        }
                     }
                 }
             };
@@ -163,7 +171,7 @@ public class DiskLruCacheTest extends BasicTest {
                     byte[] data = data();
                     String key = String.valueOf(i);
                     sizes.add(new Pair<>(key, data.length));
-                    OutputStream os = new FileOutputStream(diskLruCache.getFile(key));
+                    OutputStream os = new FileOutputStream(diskLruCache.getFile(key,null));
                     os.write(data);
                     os.close();
 
@@ -175,7 +183,7 @@ public class DiskLruCacheTest extends BasicTest {
                         if (sum <= max) {
                             Pair<String, Integer> pair = sizes.remove(index);
                             sizes.add(pair);
-                            InputStream is = new FileInputStream(diskLruCache.getFile(pair.first));
+                            InputStream is = new FileInputStream(diskLruCache.getFile(pair.first,null));
                             is.close();
                         }
                     }
@@ -193,6 +201,7 @@ public class DiskLruCacheTest extends BasicTest {
                 size += sizes.get(i).second;
             }
             final int expectedSize = size;
+            AtomicInteger counter = new AtomicInteger(0);
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
@@ -204,10 +213,15 @@ public class DiskLruCacheTest extends BasicTest {
                     if (expectedSize == cacheSize && expectedSize == actualSize) {
                         result(true);
                     } else {
-                        Log.d(TAG, "expectedSize: " + expectedSize);
-                        Log.d(TAG, "cacheSize: " + cacheSize);
-                        Log.d(TAG, "actualSize: " + actualSize);
-                        mHandler.postDelayed(this, scale / 3);
+                        if (counter.addAndGet(1) > 10) {
+                            result(false);
+                        } else {
+                            Log.d(TAG, "max: " + max);
+                            Log.d(TAG, "expectedSize: " + expectedSize);
+                            Log.d(TAG, "cacheSize: " + cacheSize);
+                            Log.d(TAG, "actualSize: " + actualSize);
+                            mHandler.postDelayed(this, Math.max(scale / 3, 150));
+                        }
                     }
                 }
             };
@@ -228,6 +242,6 @@ public class DiskLruCacheTest extends BasicTest {
 
     @NonNull
     private byte[] data() {
-        return new byte[(int) (Math.random() * 1024)];
+        return new byte[(int) (Math.random() * 1024 + 100)];
     }
 }
