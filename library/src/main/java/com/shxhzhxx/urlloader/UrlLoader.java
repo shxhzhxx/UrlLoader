@@ -21,6 +21,7 @@ import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import kotlin.jvm.functions.Function0;
 import okhttp3.CacheControl;
 import okhttp3.Call;
 import okhttp3.Headers;
@@ -29,7 +30,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserver> {
+public class UrlLoader extends TaskManager<UrlLoader.ProgressObserver> {
     private final String TAG = this.getClass().getSimpleName();
     private static final long UPDATE_TIME_INTERVAL = 500;
     private static final int MAX_BUF_SIZE = 8192;
@@ -88,12 +89,12 @@ public class UrlLoader extends MultiObserverTaskManager<UrlLoader.ProgressObserv
     }
 
     public int load(final String url, String tag, @Nullable ProgressObserver observer) {
-        int id = start(url, tag, observer, new TaskBuilder() {
+        int id = start(url, new Function0<Task>() {
             @Override
-            public Task build() {
+            public Task invoke() {
                 return new WorkThread(url);
             }
-        });
+        }, tag, observer);
         if (id < 0 && observer != null) {
             observer.onFailed();
         }

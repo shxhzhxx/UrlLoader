@@ -42,7 +42,6 @@ open class DiskLruCache(private val cachePath: File, @IntRange(from = 1) maxSize
                 //best effort to handle all pending events
                 events.poll(100, TimeUnit.MILLISECONDS)
             } catch (e: InterruptedException) {
-                e.printStackTrace()
                 return@Thread
             } ?: break
             val path = ev.path
@@ -99,6 +98,10 @@ open class DiskLruCache(private val cachePath: File, @IntRange(from = 1) maxSize
     fun release() {
         fileObserver.stopWatching()
         thread.interrupt()
+    }
+
+    protected fun finalize() {
+        release()
     }
 
     /**

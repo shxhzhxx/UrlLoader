@@ -3,7 +3,7 @@ package com.shxhzhxx.app;
 import android.util.Log;
 import android.util.Pair;
 
-import com.shxhzhxx.urlloader.MultiObserverTaskManager;
+import com.shxhzhxx.urlloader.TaskManager;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,7 +46,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
             int id = manager.exe(key, null);
             Assert.assertTrue(id >= 0);
             Assert.assertTrue(manager.isRunning(key));
-            Assert.assertTrue(manager.cancel(id));
+            Assert.assertTrue(manager.unregister(id));
             Assert.assertTrue(!manager.isRunning(key));
 
             manager.exe(key, new TestManager.TestObserver() {
@@ -129,9 +129,15 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                 }
                 if (Math.random() < 0.2) {
                     Pair<Integer, TestManager.TestObserver> pair = ids.remove((int) (Math.random() * ids.size()));
-                    manager.cancel(pair.first);
+                    manager.unregister(pair.first);
                     if (!manager.isRunning(key)) {
-                        mHandler.post(() -> result(count.get() == 0));
+                        int finalI = i;
+                        mHandler.post(() -> {
+                            if(count.get()!=0){
+                                Log.d(TAG,"i:"+ finalI);
+                            }
+                            result(count.get() == 0);
+                        });
                         break;
                     }
                 }
@@ -239,7 +245,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
                 if (Math.random() * tags.size() > 3) {
                     int index = (int) (Math.random() * tags.size());
                     tag = tags.get(index);
-                    Assert.assertTrue(manager.cancelByTag(tag));
+                    Assert.assertTrue(manager.unregisterByTag(tag));
                 }
 
                 try {
@@ -251,7 +257,7 @@ public class MultiObserverTaskManagerTest extends BasicTest {
         }));
     }
 
-    private static class TestManager extends MultiObserverTaskManager<TestManager.TestObserver> {
+    private static class TestManager extends TaskManager<TestManager.TestObserver> {
         static class TestObserver {
             public void onComplete(String key) {
             }
@@ -261,16 +267,11 @@ public class MultiObserverTaskManagerTest extends BasicTest {
         }
 
         public int exe(String key, String tag, TestObserver observer) {
-            return start(key, tag, observer, new TaskBuilder() {
-                @Override
-                public Task build() {
-                    return new TestTask(key);
-                }
-            });
+            return start(key, () -> new TestTask(key), tag, observer);
         }
 
         public int exe(String key, TestObserver observer) {
-            return exe(key,null,observer);
+            return exe(key, null, observer);
         }
 
         class TestTask extends Task {

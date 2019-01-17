@@ -2,11 +2,17 @@ package com.shxhzhxx.app;
 
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
+import kotlin.Unit;
+import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function1;
+import kotlin.jvm.functions.Function3;
+
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
 import com.shxhzhxx.urlloader.UrlLoader;
+import com.shxhzhxx.urlloader.UrlLoaderEx;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -34,6 +40,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         findViewById(R.id.download).setOnClickListener(this);
         findViewById(R.id.cancel).setOnClickListener(this);
         findViewById(R.id.clear).setOnClickListener(this);
+
+        UrlLoaderEx loader = new UrlLoaderEx(getCacheDir(),10*1024,4);
+        loader.load("", "", file -> {
+            Log.d(TAG,"onComplete");
+            return null;
+        }, () -> {
+            Log.d(TAG,"onFailed");
+            return null;
+        }, () -> {
+            Log.d(TAG,"onCanceled");
+            return null;
+        }, (aLong, aLong2, aLong3) -> {
+            Log.d(TAG,"onProgressUpdate");
+            return null;
+        });
     }
 
     @Override

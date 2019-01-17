@@ -53,13 +53,13 @@ public class DiskLruCacheTest extends BasicTest {
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "initTest: " + i);
             deletePath(cachePath);
-            initTest((int) (20 * Math.random()));
+            initTest((int) (2000 * Math.random()));
         }
 
         for (int i = 0; i < 100; ++i) {
             Log.d(TAG, "lruTest: " + i);
             deletePath(cachePath);
-            lruTest((int) (20 * Math.random()));
+            lruTest((int) (2000 * Math.random()));
         }
     }
 
