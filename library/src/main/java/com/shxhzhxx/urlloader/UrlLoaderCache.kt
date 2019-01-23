@@ -3,7 +3,7 @@ package com.shxhzhxx.urlloader
 import androidx.annotation.IntRange
 import java.io.File
 
-class UrlLoaderCache(cachePath: File, @IntRange(from = 1) maxSize: Int) : DiskLruCache(cachePath, maxSize) {
+class UrlLoaderCache(cachePath: File, @IntRange(from = 1) maxSize: Int) : FileLruCache(cachePath, maxSize) {
     private val suffixData = md5("UrlLoaderCache.suffixData" + cachePath.absolutePath).takeLast(6)
     private val suffixHeader = md5("UrlLoaderCache.suffixHeader" + cachePath.absolutePath).takeLast(6)
     override fun accept(dir: File?, name: String?) = name != null && name.endsWith(suffixData)

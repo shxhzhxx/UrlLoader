@@ -4,7 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import android.util.Pair;
 
-import com.shxhzhxx.urlloader.DiskLruCache;
+import com.shxhzhxx.urlloader.FileLruCache;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,8 +27,8 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 @RunWith(AndroidJUnit4.class)
-public class DiskLruCacheTest extends BasicTest {
-    private static final String TAG = "DiskLruCacheTest";
+public class FileLruCacheTest extends BasicTest {
+    private static final String TAG = "FileLruCacheTest";
 
     private File cachePath;
 
@@ -83,7 +83,8 @@ public class DiskLruCacheTest extends BasicTest {
             Thread editThread = new EditThread(cachePath, scale);
             editThread.start();
 
-            final DiskLruCache diskLruCache = new DiskLruCache(cachePath, 30 * 1024 * 1024);
+            final FileLruCache fileLruCache = new FileLruCache(cachePath, 30 * 1024 * 1024);
+            fileLruCache.prepare();
             addThread.interrupt();
             editThread.interrupt();
 
@@ -94,9 +95,9 @@ public class DiskLruCacheTest extends BasicTest {
                     int size = 0;
                     for (File file : cachePath.listFiles())
                         size += file.length();
-                    int cacheSize = diskLruCache.size();
+                    int cacheSize = fileLruCache.size();
                     if (cacheSize == size) {
-                        diskLruCache.release();
+                        fileLruCache.release();
                         result(true);
                     } else {
                         if (counter.addAndGet(1) > 10) {
@@ -163,7 +164,8 @@ public class DiskLruCacheTest extends BasicTest {
             return;
 
         int max = scale * 1024;
-        DiskLruCache diskLruCache = new DiskLruCache(cachePath, max);
+        FileLruCache fileLruCache = new FileLruCache(cachePath, max);
+        fileLruCache.prepare();
         Assert.assertTrue(runTest(() -> {
             List<Pair<String, Integer>> sizes = new ArrayList<>();
             try {
@@ -171,7 +173,7 @@ public class DiskLruCacheTest extends BasicTest {
                     byte[] data = data();
                     String key = String.valueOf(i);
                     sizes.add(new Pair<>(key, data.length));
-                    OutputStream os = new FileOutputStream(diskLruCache.getFile(key,null));
+                    OutputStream os = new FileOutputStream(fileLruCache.getFile(key, null));
                     os.write(data);
                     os.close();
 
@@ -183,7 +185,7 @@ public class DiskLruCacheTest extends BasicTest {
                         if (sum <= max) {
                             Pair<String, Integer> pair = sizes.remove(index);
                             sizes.add(pair);
-                            InputStream is = new FileInputStream(diskLruCache.getFile(pair.first,null));
+                            InputStream is = new FileInputStream(fileLruCache.getFile(pair.first, null));
                             is.close();
                         }
                     }
@@ -205,7 +207,7 @@ public class DiskLruCacheTest extends BasicTest {
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
-                    int cacheSize = diskLruCache.size();
+                    int cacheSize = fileLruCache.size();
                     int actualSize = 0;
                     for (File file : cachePath.listFiles()) {
                         actualSize += (int) file.length();
@@ -228,14 +230,14 @@ public class DiskLruCacheTest extends BasicTest {
             mHandler.postDelayed(run, scale / 3);
         }));
         Assert.assertTrue(runTest(() -> {
-            diskLruCache.evictAll();
-            int size = diskLruCache.size();
+            fileLruCache.evictAll();
+            int size = fileLruCache.size();
             int length = cachePath.listFiles().length;
             if (size != 0 || length != 0) {
                 Log.d(TAG, "size: " + size);
                 Log.d(TAG, "length: " + length);
             }
-            diskLruCache.release();
+            fileLruCache.release();
             result(size == 0 && length == 0);
         }));
     }

@@ -20,7 +20,7 @@ open class TaskManager<T>(maxPoolSize: Int = CORES) {
     private val threadPoolExecutor = ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 60L, TimeUnit.SECONDS, LinkedBlockingQueue()).apply {
         allowCoreThreadTimeOut(true)
     }
-    private val handler = Handler()
+    val handler = Handler()
     private val keyTaskMap = HashMap<Any, Task>()
     private val idTaskMap = HashMap<Int, Task>()
     private val tagIdsMap = HashMap<Any, MutableSet<Int>>()

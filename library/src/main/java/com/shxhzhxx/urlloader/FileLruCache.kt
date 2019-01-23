@@ -18,11 +18,11 @@ import java.util.concurrent.TimeUnit
  * 1.[size] is not guaranteed to be real-time accurate.
  * 2.Avoid file operations in [cachePath] during initialization.
  *
- * If a DiskLruCache is garbage collected, it
+ * If a FileLruCache is garbage collected, it
  * will stop control cache size.  To ensure you keep controlling cache size, you must
- * keep a reference to the DiskLruCache instance from some other live object.
+ * keep a reference to the FileLruCache instance from some other live object.
  */
-open class DiskLruCache(private val cachePath: File, @IntRange(from = 1) maxSize: Int) : LruCache<String, FileInfo>(maxSize), FilenameFilter {
+open class FileLruCache(private val cachePath: File, @IntRange(from = 1) maxSize: Int) : LruCache<String, FileInfo>(maxSize), FilenameFilter {
     private val msgDigest = MessageDigest.getInstance("MD5")
     private val events = LinkedBlockingQueue<FileEvent>()
     private val fileObserver = object : FileObserver(cachePath.absolutePath, OPEN or DELETE or MOVED_TO or MOVED_FROM or CLOSE_WRITE or CLOSE_NOWRITE) {
@@ -89,8 +89,10 @@ open class DiskLruCache(private val cachePath: File, @IntRange(from = 1) maxSize
 
     init {
         if ((!cachePath.exists() || !cachePath.isDirectory) && !cachePath.mkdirs())
-            throw IllegalArgumentException("DiskLruCache create cachePath failed")
+            throw IllegalArgumentException("FileLruCache create cachePath failed")
+    }
 
+    fun prepare(){
         fileObserver.startWatching()
         thread.start()
     }
