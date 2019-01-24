@@ -81,50 +81,6 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
     fun md5(raw: String) = cache.md5(raw)
 
 
-    private fun Headers.updateLastChecked(): Headers = newBuilder().set(LAST_CHECKED, (System.currentTimeMillis() / 1000).toString()).build()
-    private fun Headers.merge(headers: Headers): Headers = newBuilder().apply {
-        for (name in listOf("Cache-Control", "ETag", "Last-Modified")) {
-            headers[name]?.let { set(name, it) }
-        }
-    }.build()
-
-    private fun Headers.isFresh(): Boolean {
-        val lastChecked = get(LAST_CHECKED)?.toLong() ?: return false
-        return System.currentTimeMillis() / 1000 < lastChecked + CacheControl.parse(this).maxAgeSeconds()
-    }
-
-    private fun File.writeHeaders(headers: Headers) =
-            try {
-                FileOutputStream(this).write(headers.updateLastChecked().toString().toByteArray())
-                true
-            } catch (e: IOException) {
-                false
-            }
-
-    private fun File.readHeaders(): Headers? {
-        val reader = try {
-            BufferedReader(FileReader(this))
-        } catch (e: FileNotFoundException) {
-            return null
-        }
-        val builder = Headers.Builder()
-        return try {
-            while (true) {
-                val line = reader.readLine() ?: break
-                try {
-                    builder.add(line)
-                } catch (ignore: IllegalArgumentException) {
-                    //skip headers with format exception
-                }
-            }
-            builder.build()
-        } catch (e: IOException) {
-            null
-        } finally {
-            reader.close()
-        }
-    }
-
     /**
      * https://www.rfc-editor.org/rfc/rfc2068.txt
      * https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
@@ -197,18 +153,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         fun download(): File? {
             if (!resetCache())
                 return null
-            val request = try {
-                Request.Builder().url(url)
-            } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "\"$url\" is not a valid HTTP or HTTPS URL")
-                return null
-            }
-            val response = try {
-                client.newCall(request.build()).execute()
-            } catch (e: IOException) {
-                Log.e(TAG, "execute IOException: ${e.message}")
-                return null
-            }
+            val response = client.loadUrl(url) ?: return null
             return if (response.isSuccessful) {
                 readResponse(response)
             } else {
@@ -225,25 +170,13 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         fun resumeDownload(): File? {
             if (headers["Accept-Ranges"] != "bytes") //server does not support resume download of OCTET unit.
                 return download()
-            val lastModified = headers["Last-Modified"]
-            val eTag = headers["ETag"]
-            if (lastModified == null && eTag == null)
-                return download()
-            val request = try {
-                Request.Builder().url(url)
-            } catch (e: IllegalArgumentException) {
-                Log.e(TAG, "\"$url\" is not a valid HTTP or HTTPS URL")
-                return null
-            }
+            val validator = headers["ETag"] ?: headers["Last-Modified"] ?: return download()
             val initLen = dataCache.length()
-            request.addHeader("Range", "bytes=$initLen-")
-            request.addHeader("If-Range", eTag ?: lastModified!!)
-            val response = try {
-                client.newCall(request.build()).execute()
-            } catch (e: IOException) {
-                Log.e(TAG, "execute IOException: ${e.message}")
-                return null
-            }
+            val response = client.loadUrl(url) { builder ->
+                builder.addHeader("Range", "bytes=$initLen-")
+                builder.addHeader("If-Range", validator)
+                return@loadUrl builder
+            } ?: return null
             return when {
                 response.code() == 206 /*Partial Content*/ -> {
                     headerCache.writeHeaders(headers.merge(response.headers()))
@@ -271,26 +204,12 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         if (headers.isFresh()) {
             return dataCache
         }
-        val lastModified = headers["Last-Modified"]
-        val eTag = headers["ETag"]
-        if (lastModified == null && eTag == null)
-            return download()
-        val request = try {
-            Request.Builder().url(url)
-        } catch (e: IllegalArgumentException) {
-            Log.e(TAG, "\"$url\" is not a valid HTTP or HTTPS URL")
-            return null
-        }
-        if (lastModified != null)
-            request.header("If-Modified-Since", lastModified)
-        if (eTag != null)
-            request.header("If-None-Match", eTag)
-        val response = try {
-            client.newCall(request.build()).execute()
-        } catch (e: IOException) {
-            Log.e(TAG, "execute IOException: ${e.message}")
-            return null
-        }
+        val validatorPair = headers["ETag"]?.let { "If-None-Match" to it }
+                ?: headers["Last-Modified"]?.let { "If-Modified-Since" to it } ?: return download()
+        val response = client.loadUrl(url) { builder ->
+            builder.header(validatorPair.first, validatorPair.second)
+            return@loadUrl builder
+        } ?: return null
         return when {
             response.code() == 304/*not modified*/ -> {
                 headerCache.writeHeaders(headers.merge(response.headers()))
@@ -335,5 +254,69 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         override fun onObserverUnregistered(observer: Callback?) {
             observer?.onCanceled?.invoke()
         }
+    }
+}
+
+
+private fun OkHttpClient.loadUrl(url: String, converter: ((Request.Builder) -> Request.Builder) = { it }): Response? {
+    val request = try {
+        Request.Builder().url(url)
+    } catch (e: IllegalArgumentException) {
+        Log.e(TAG, "\"$url\" is not a valid HTTP or HTTPS URL")
+        return null
+    }
+    return try {
+        newCall(converter.invoke(request).build()).execute()
+    } catch (e: IOException) {
+        Log.e(TAG, "execute IOException: ${e.message}")
+        null
+    }
+}
+
+private fun Headers.validator(): String? {
+    return get("ETag") ?: get("Last-Modified")
+}
+
+private fun Headers.updateLastChecked(): Headers = newBuilder().set(LAST_CHECKED, (System.currentTimeMillis() / 1000).toString()).build()
+private fun Headers.merge(headers: Headers): Headers = newBuilder().apply {
+    for (name in listOf("Cache-Control", "ETag", "Last-Modified")) {
+        headers[name]?.let { set(name, it) }
+    }
+}.build()
+
+private fun Headers.isFresh(): Boolean {
+    val lastChecked = get(LAST_CHECKED)?.toLong() ?: return false
+    return System.currentTimeMillis() / 1000 < lastChecked + CacheControl.parse(this).maxAgeSeconds()
+}
+
+private fun File.writeHeaders(headers: Headers) =
+        try {
+            FileOutputStream(this).write(headers.updateLastChecked().toString().toByteArray())
+            true
+        } catch (e: IOException) {
+            false
+        }
+
+private fun File.readHeaders(): Headers? {
+    val reader = try {
+        BufferedReader(FileReader(this))
+    } catch (e: FileNotFoundException) {
+        return null
+    }
+    val builder = Headers.Builder()
+    return try {
+        while (true) {
+            val line = reader.readLine() ?: break
+            try {
+                builder.add(line)
+            } catch (ignore: IllegalArgumentException) {
+                //skip headers with format exception
+            }
+        }
+        builder.build()
+    } catch (e: IOException) {
+        null
+    } finally {
+        reader.close()
     }
 }

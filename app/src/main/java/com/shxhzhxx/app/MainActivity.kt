@@ -19,8 +19,9 @@ class MainActivity : AppCompatActivity() {
         val url = URL_BIG_VIDEO
         val loader = UrlLoader(cacheDir)
 
+        var id: Int? = null
         findViewById<Button>(R.id.download).setOnClickListener {
-            loader.load(url,
+            id = loader.load(url,
                     onComplete = { file ->
                         Log.d(TAG, "onComplete:${file.absolutePath}")
                     },
@@ -36,7 +37,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
         findViewById<Button>(R.id.cancel).setOnClickListener {
-            loader.cancel(url)
+            id?.let { loader.unregister(it) }
         }
         findViewById<Button>(R.id.clear).setOnClickListener {
             loader.clearCache()
