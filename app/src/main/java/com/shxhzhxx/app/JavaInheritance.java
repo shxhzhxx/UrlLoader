@@ -9,8 +9,13 @@ import kotlin.jvm.functions.Function0;
 
 public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
     void func() {
-        Object key = new Object();
-        start(key, (Function0<MyTask>) () -> new MyTask(key), null, null);
+        final Object key = new Object();
+        start(key, new Function0<Task>() {
+            @Override
+            public Task invoke() {
+                return new MyTask(key);
+            }
+        }, null, null);
     }
 
     static class MyCallback {
@@ -41,18 +46,24 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
         protected void doInBackground() {
             try {
                 Thread.sleep(10000);
-                setPostResult(() -> {
-                    for (MyCallback observer : getObservers()) {
-                        if (observer != null)
-                            observer.onCallback();
+                setPostResult(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (MyCallback observer : getObservers()) {
+                            if (observer != null)
+                                observer.onCallback();
+                        }
                     }
                 });
             } catch (InterruptedException e) {
                 e.printStackTrace();
-                setPostResult(() -> {
-                    for (MyCallback observer : getObservers()) {
-                        if (observer != null)
-                            observer.onCallback();
+                setPostResult(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (MyCallback observer : getObservers()) {
+                            if (observer != null)
+                                observer.onCallback();
+                        }
                     }
                 });
             }

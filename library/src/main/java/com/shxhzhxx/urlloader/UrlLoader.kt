@@ -22,24 +22,20 @@ class Callback(
 )
 
 
-class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024,
-                maxPoolSize: Int = Runtime.getRuntime().availableProcessors()) : TaskManager<Callback>(maxPoolSize) {
+class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024) : TaskManager<Callback>() {
     private val cache = UrlLoaderCache(cachePath, maxCacheSize).apply { prepare() }
     private val client = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS).build()
 
     @JvmOverloads
-    fun load(url: String, tag: String? = null,
+    fun load(url: String, tag: Any? = null,
              onComplete: ((File) -> Unit)? = null,
              onFailed: (() -> Unit)? = null,
              onCanceled: (() -> Unit)? = null,
              onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-    ): Int {
-        val callback = Callback(onComplete, onFailed, onCanceled, onProgress)
-        return start(url, { WorkThread(url) }, tag, callback).also { id ->
-            if (id < 0) {
-                callback.onFailed?.invoke()
-            }
+    ) = start(url, { Worker(url) }, tag, Callback(onComplete, onFailed, onCanceled, onProgress)).also { id ->
+        if (id < 0) {
+            onFailed?.invoke()
         }
     }
 
@@ -226,7 +222,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
     }
 
 
-    internal inner class WorkThread(private val url: String) : Task(url) {
+    internal inner class Worker(private val url: String) : Task(url) {
         override fun doInBackground() {
             if (isCanceled)
                 return
