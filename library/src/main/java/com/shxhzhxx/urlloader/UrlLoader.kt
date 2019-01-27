@@ -22,8 +22,8 @@ class Callback(
 )
 
 
-class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024) : TaskManager<Callback>() {
-    private val cache = UrlLoaderCache(cachePath, maxCacheSize).apply { prepare() }
+class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024, cacheSeed: String = cachePath.absolutePath) : TaskManager<Callback>() {
+    private val cache = UrlLoaderCache(cachePath, maxCacheSize, cacheSeed).apply { prepare() }
     private val client = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS).build()
 
@@ -267,10 +267,6 @@ private fun OkHttpClient.loadUrl(url: String, converter: ((Request.Builder) -> R
         Log.e(TAG, "execute IOException: ${e.message}")
         null
     }
-}
-
-private fun Headers.validator(): String? {
-    return get("ETag") ?: get("Last-Modified")
 }
 
 private fun Headers.updateLastChecked(): Headers = newBuilder().set(LAST_CHECKED, (System.currentTimeMillis() / 1000).toString()).build()
