@@ -286,6 +286,7 @@ private fun File.writeHeaders(headers: Headers) =
             FileOutputStream(this).write(headers.updateLastChecked().toString().toByteArray())
             true
         } catch (e: IOException) {
+            delete()
             false
         }
 

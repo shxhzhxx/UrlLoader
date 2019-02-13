@@ -6,13 +6,13 @@ import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.Log
-import android.view.View
-import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
-import androidx.fragment.app.Fragment
 import com.shxhzhxx.urlloader.UrlLoader
+import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 import java.io.IOException
+import java.util.*
+import java.util.concurrent.*
 
 const val TAG = "MainActivity"
 const val URL_BIG = "https://static.usasishu.com/bigFile.pdf"
@@ -26,67 +26,96 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val url = URL_BIG_IMG
+        val url = URL_BIG
         val loader = UrlLoader(cacheDir)
 
-        var id: Int? = null
+        download.setOnClickListener {
+            Thread {
+                val task  = FutureTask<String> {work()}
 
-        findViewById<View>(R.id.download).setOnClickListener {
-            id = loader.load(url,
-                    onComplete = { file ->
-                        bitmap = file.decodeBitmap(Params("", 300, 300, true))
-                        Log.d(TAG, "w:${bitmap?.width}")
-                        Log.d(TAG, "h:${bitmap?.height}")
-                    },
-                    onProgress = { total, current, speed ->
-                        Log.d(TAG, "onProgress:$total   $current   $speed")
-                    },
-                    onCanceled = {
-                        Log.d(TAG, "onCanceled")
-                    },
-                    onFailed = {
-                        Log.d(TAG, "onFailed")
+                val threadPool = Executors.newCachedThreadPool()
+                val f = threadPool.submit {
+                    //某同步任务，1s后取消
+                    try {
+                        task.run()
+                    } catch (e: Throwable) {
+                        Log.d(TAG, "run exception:${e.message}")
+                        Log.d(TAG, "isCancelled 1:${task.isCancelled}")
+                        Log.d(TAG, "isDone 1:${task.isDone}")
                     }
-            )
+                    try {
+                        Log.d(TAG, "get 1:${task.get()}")
+                        Log.d(TAG, "future.isCancelled:${task.isCancelled}")
+                    } catch (e: Exception) {
+                        Log.d(TAG, "get 1 exception:${e.message}")
+                        Log.d(TAG, "isCancelled 1:${task.isCancelled}")
+                        Log.d(TAG, "isDone 1:${task.isDone}")
+                    }
+                }
+
+                Thread.sleep(1000)
+                Thread {
+                    //另一个监听者，需要在任务被取消后重启任务
+                    try {
+                        task.run()
+                        Log.d(TAG,"run")
+                        Log.d(TAG, "get 2:${task.get()}")
+                        Log.d(TAG,"get 3:${task.get()}")
+                    } catch (e: Exception) {
+                        Log.d(TAG, "get 2 exception:${e.message}")
+                        Log.d(TAG, "isCancelled 2:${task.isCancelled}")
+                        Log.d(TAG, "isDone 2:${task.isDone}")
+                    }
+                }.start()
+                Thread.sleep(1000)
+                f.cancel(true)
+            }.start()
         }
-        findViewById<Button>(R.id.cancel).setOnClickListener {
-            id?.let { loader.unregister(it) }
+        cancel.setOnClickListener {
         }
-        findViewById<Button>(R.id.clear).setOnClickListener {
-            loader.clearCache()
+        clear.setOnClickListener {
         }
-        findViewById<Button>(R.id.check).setOnClickListener {
-            Log.d(TAG, "check:${loader.checkDownload(url)}")
+        check.setOnClickListener {
         }
     }
 
-    private fun File.decodeBitmap(params: Params): Bitmap? {
-        val centerCrop = params.centerCrop && params.height > 0 && params.width > 0
-        if (params.height <= 0 && params.width <= 0) {
-            Log.e(TAG, "load bitmap without compress :$absolutePath")
-        }
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(absolutePath, opts)
-        val (height, width) = listOf(params.height, params.width).map { return@map if (it <= 0) Int.MAX_VALUE else it }
-        val (out, dst) = listOf(opts.outHeight to height, opts.outWidth to width)
-                .run { return@run if (centerCrop) minBy { it.first / it.second } else maxBy { it.first / it.second } }!!
-        opts.inSampleSize = out / dst
-        opts.inDensity = out
-        opts.inTargetDensity = dst * opts.inSampleSize
-        opts.inScaled = true
-        opts.inJustDecodeBounds = false
+    private fun work(): String? {
+        Log.d(TAG, "work start:${Thread.currentThread().id}")
 
-        return if (!centerCrop) BitmapFactory.decodeFile(absolutePath, opts) else
-            try {
-                BitmapRegionDecoder.newInstance(absolutePath, !canWrite()).decodeRegion(Rect(
-                        opts.outWidth / 2 - width * opts.inSampleSize / 2,
-                        opts.outHeight / 2 - height * opts.inSampleSize / 2,
-                        opts.outWidth / 2 + width * opts.inSampleSize / 2,
-                        opts.outHeight / 2 + height * opts.inSampleSize / 2), opts)
-            } catch (e: IOException) {
-                null
-            }
+        Thread.sleep(5000)
+        val result = UUID.randomUUID().toString()
+        Log.d(TAG, "work finish:$result")
+        return result
     }
 }
 
+
 data class Params(val path: String, val width: Int, val height: Int, val centerCrop: Boolean)
+
+private fun File.decodeBitmap(params: Params): Bitmap? {
+    val centerCrop = params.centerCrop && params.height > 0 && params.width > 0
+    if (params.height <= 0 && params.width <= 0) {
+        Log.e(TAG, "load bitmap without compress :$absolutePath")
+    }
+    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(absolutePath, opts)
+    val (height, width) = listOf(params.height, params.width).map { return@map if (it <= 0) Int.MAX_VALUE else it }
+    val (out, dst) = listOf(opts.outHeight to height, opts.outWidth to width)
+            .run { return@run if (centerCrop) minBy { it.first / it.second } else maxBy { it.first / it.second } }!!
+    opts.inSampleSize = out / dst
+    opts.inDensity = out
+    opts.inTargetDensity = dst * opts.inSampleSize
+    opts.inScaled = true
+    opts.inJustDecodeBounds = false
+
+    return if (!centerCrop) BitmapFactory.decodeFile(absolutePath, opts) else
+        try {
+            BitmapRegionDecoder.newInstance(absolutePath, !canWrite()).decodeRegion(Rect(
+                    opts.outWidth / 2 - width * opts.inSampleSize / 2,
+                    opts.outHeight / 2 - height * opts.inSampleSize / 2,
+                    opts.outWidth / 2 + width * opts.inSampleSize / 2,
+                    opts.outHeight / 2 + height * opts.inSampleSize / 2), opts)
+        } catch (e: IOException) {
+            null
+        }
+}
