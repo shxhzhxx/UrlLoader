@@ -1,6 +1,7 @@
 package com.shxhzhxx.urlloader
 
 import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.util.concurrent.*
 
@@ -17,31 +18,33 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
     private val threadPoolExecutor = ThreadPoolExecutor(maximumPoolSize, maximumPoolSize, 60L, TimeUnit.SECONDS, LinkedBlockingQueue()).apply {
         allowCoreThreadTimeOut(true)
     }
-    val handler = Handler()
+    val handler = Handler(Looper.getMainLooper())
     private val keyTaskMap = HashMap<Any, Task>()
     private val idTaskMap = HashMap<Int, Task>()
     private val tagIdsMap = HashMap<Any, MutableSet<Int>>()
     private val idTagMap = HashMap<Int, Any>()
 
     fun cancelAll() {
-        keyTaskMap.map { it.key }.forEach { key -> cancel(key) }
+        synchronized(this) {
+            keyTaskMap.map { it.key }.forEach { key -> cancel(key) }
+        }
     }
 
     /**
      * cancel a task marked by key.
      * all observer will remain in [Task.asyncObservers], and [Task.onObserverUnregistered] won't be invoked for these asyncObservers.
      */
-    fun cancel(key: Any) = keyTaskMap[key]?.unregisterAll() != null
+    fun cancel(key: Any) = synchronized(this) { keyTaskMap[key]?.unregisterAll() != null }
 
     /**
      * unregister a observer marked by id,
      * Contrary to [cancel], removed observer will not remain in [Task.asyncObservers],
      * and [Task.onObserverUnregistered] will been invoked for this observer.
      */
-    fun unregister(id: Int) = idTaskMap[id]?.unregisterAsyncObserver(id) != null
+    fun unregister(id: Int) = synchronized(this) { idTaskMap[id]?.unregisterAsyncObserver(id) != null }
 
-    fun unregisterByTag(tag: Any) = tagIdsMap[tag]?.toList()?.forEach { id -> unregister(id) } != null
-    fun isRunning(key: Any) = keyTaskMap.containsKey(key)
+    fun unregisterByTag(tag: Any) = synchronized(this) { tagIdsMap[tag]?.toList()?.forEach { id -> unregister(id) } != null }
+    fun isRunning(key: Any) = synchronized(this) { keyTaskMap.containsKey(key) }
 
     /**
      * join a task or start a new task.
@@ -52,7 +55,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
      * @param observer may be null. Identical instance can be passed multi times.
      * @return non-negative task id. this id may be reused after task is finished or canceled or observer is unregistered.
      */
-    protected fun asyncStart(key: Any, builder: () -> Task, tag: Any? = null, observer: T? = null): Int {
+    protected fun asyncStart(key: Any, builder: () -> Task, tag: Any? = null, observer: T? = null): Int = synchronized(this) {
         val id = kotlin.run {
             var i = 0
             while (idTaskMap.containsKey(i)) {
@@ -78,11 +81,10 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
 
     protected fun syncStart(key: Any, builder: () -> Task, canceled: () -> Boolean, observer: T? = null): V? {
         val task = synchronized(this) {
-            return@synchronized keyTaskMap[key] ?: builder.invoke().also { t ->
+            return@synchronized (keyTaskMap[key] ?: builder.invoke().also { t ->
                 t.syncInit()
-            }
+            }).also { it.registerSyncObserver(observer) }
         }
-        task.registerSyncObserver(observer)
         return task.syncGet(canceled, observer)
     }
 
@@ -128,7 +130,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
             }
 
         @Volatile
-        var isDone = false
+        var isTaskDone = false
             private set
 
         /**
@@ -163,15 +165,15 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
             return try {
                 val result = doInBackground()
                 runResult(postResult)
-                isDone = true
+                isTaskDone = true
                 result
             } catch (e: InterruptedException) {
-                isDone = false
+                isTaskDone = false
                 throw e
             } catch (e: Throwable) {
                 Log.e(TAG, "Unhandled exception occurs in doInBackground: ${e.message}")
                 runResult(null)
-                isDone = true
+                isTaskDone = true
                 null
             }
         }
@@ -189,13 +191,15 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
         fun syncGet(canceled: () -> Boolean, observer: T?): V? {
             return kotlin.run {
                 while (!canceled.invoke() && !isCanceled) {
-                    syncFuture?.also { future ->
+                    syncFuture?.also { future -> //sync priority
                         try {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            if (!canceled.invoke()) {
-                                synchronized(this) {
+                            if (canceled.invoke()) {
+                                return@run null
+                            } else {
+                                synchronized(this) {//reset future
                                     if (syncFuture?.isDone == true)
                                         syncFuture = FutureTask(this)
                                 }
@@ -209,14 +213,16 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                 }
                 return@run null
             }.also {
-                unregisterSyncObserver(observer)
-                if (syncObservers.isEmpty()) {
-                    if (asyncObservers.isEmpty()) {
-                        keyTaskMap.remove(key)
-                        isCanceled = true
-                    } else {
-                        if (!isDone)
-                            asyncFuture = threadPoolExecutor.submit(this)
+                synchronized(this@TaskManagerEx){
+                    unregisterSyncObserver(observer)
+                    if (syncObservers.isEmpty()) {
+                        if (asyncObservers.isEmpty()) {
+                            keyTaskMap.remove(key)
+                            isCanceled = true
+                        } else {
+                            if (!isTaskDone)
+                                asyncFuture = threadPoolExecutor.submit(this)
+                        }
                     }
                 }
             }

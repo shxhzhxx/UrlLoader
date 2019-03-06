@@ -9,12 +9,19 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.shxhzhxx.urlloader.TaskManagerEx
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.SupervisorJob
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.util.*
+import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
 import kotlin.coroutines.CoroutineContext
 
 const val TAG = "MainActivity"
@@ -24,38 +31,87 @@ const val URL_MAX_AGE = "http://plpwobkse.bkt.clouddn.com/ic_launcher.png"
 const val URL_BIG_IMG = "http://plpwobkse.bkt.clouddn.com/1125-2436-72.png"
 
 class MainActivity : AppCompatActivity(), CoroutineScope {
+    private val job = SupervisorJob()
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default + job
-    private var bitmap: Bitmap? = null
-    lateinit var job: Job
+
     override fun onDestroy() {
         super.onDestroy()
+        Log.d(TAG, "onDestroy")
         job.cancel()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        job = Job()
         setContentView(R.layout.activity_main)
 
+        val manager = MyTaskManager()
+        val threadPool = Executors.newCachedThreadPool()
         download.setOnClickListener {
-            val promise = async(start = CoroutineStart.LAZY) {
-                coroutineWork()
+            val key = Any()
+            var canceled = false
+            val task1 = threadPool.submit {
+                Log.d(TAG, "task1:${Thread.currentThread().id}")
+                Log.d(TAG, "task1:${manager.syncLoad(key) { canceled }}")
             }
-            val task = async {
-                Log.d(TAG,"task:${promise.await()}")
+            val task2 = threadPool.submit {
+                Log.d(TAG, "task2:${Thread.currentThread().id}")
+                Thread.sleep(300)
+                Log.d(TAG, "task2:${manager.syncLoad(key) { false }}")
             }
-            launch {
-                Log.d(TAG,"launch:${promise.await()}")
-                delay(2000)
-            }
-            launch {
-                delay(1000)
-                task.cancel()
+            Thread.sleep(500)
+            val id = manager.asyncLoad(key)
+            threadPool.submit {
+                Thread.sleep(2000)
+                canceled = true
+                task1.cancel(true)
+                Thread.sleep(1000)
+                runOnUiThread {
+                    manager.unregister(id)
+                }
             }
         }
-
         cancel.setOnClickListener {
+            val future = FutureTask {
+                Log.d(TAG, "future:${Thread.currentThread().id}")
+                try {
+                    val client = OkHttpClient.Builder().build()
+                    val response = client.loadUrl(URL_BIG)
+                    val inputStream = response?.body()?.byteStream()
+                    if (inputStream != null) {
+                        val buff = ByteArray(50 * 1024)
+                        while (true) {
+                            val n = inputStream.read(buff, 0, 50 * 1024)
+                            Log.d(TAG, "read:$n")
+                            if (n <= 0)
+                                break
+                        }
+                    }
+                }catch (e:InterruptedIOException){
+                    throw InterruptedException(e.message)
+                } catch (e: Throwable) {
+                    Log.d(TAG, "future exception:${e.javaClass}")
+                }
+                return@FutureTask "asdfasdf"
+            }
+            val task1 = threadPool.submit {
+                try {
+                    future.run()
+                    Log.d(TAG, "task1:${future.get()}")
+                } catch (e: Throwable) {
+                    Log.d(TAG, "task1:${e.javaClass}")
+                }
+            }
+            threadPool.submit {
+                Thread.sleep(1000)
+                task1.cancel(true)
+                try {
+                    future.run()
+                    Log.d(TAG, "task2:${future.get()}")
+                } catch (e: Throwable) {
+                    Log.d(TAG, "task2:${e.javaClass}")
+                }
+            }
         }
         clear.setOnClickListener {
         }
@@ -64,40 +120,20 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     }
 }
 
-suspend fun failedConcurrentSum(): Int = coroutineScope {
-    val one = async<Int> {
-        try {
-            delay(Long.MAX_VALUE) // Emulates very long computation
-            42
-        } finally {
-            println("First child was cancelled")
-        }
+private fun OkHttpClient.loadUrl(url: String, converter: ((Request.Builder) -> Request.Builder) = { it }): Response? {
+    cache()?.evictAll()
+    val request = try {
+        Request.Builder().url(url)
+    } catch (e: IllegalArgumentException) {
+        Log.e(TAG, "\"$url\" is not a valid HTTP or HTTPS URL")
+        return null
     }
-    val two = async<Int> {
-        delay(1000)
-        println("Second child throws an exception")
-        throw ArithmeticException()
-    }
-    one.await() + two.await()
-}
-
-suspend fun coroutineWork(progress: ((Float) -> Unit)? = null): String? {
-    return runBlocking{
-        Log.d(TAG, "work start:${Thread.currentThread().id}")
-        repeat(10) {
-            try {
-                delay(500)
-            } catch (e: CancellationException) {
-                Log.d(TAG, "CancellationException")
-                return@runBlocking null
-            } finally {
-                Log.d(TAG, "finally")
-            }
-            progress?.invoke(it.toFloat() / 10)
-        }
-        val result = UUID.randomUUID().toString()
-        Log.d(TAG, "work finish:$result")
-        return@runBlocking result
+    return try {
+        newCall(converter.invoke(request).build()).execute()
+    } catch (e: InterruptedIOException) {
+        throw InterruptedException(e.message)
+    } catch (e: IOException) {
+        null
     }
 }
 
