@@ -12,10 +12,15 @@
         android:layout_margin="20dp" />
 
     <Button
-        android:id="@+id/download"
+        android:id="@+id/asyncLoad"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="download" />
+        android:text="asyncLoad" />
+    <Button
+        android:id="@+id/syncLoad"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="syncLoad" />
 
     <Button
         android:id="@+id/cancel"

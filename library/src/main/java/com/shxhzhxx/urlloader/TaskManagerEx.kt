@@ -101,7 +101,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
             tagIdsMap.remove(tag)
     }
 
-    abstract inner class Task(val key: Any) : Callable<V?> {
+    protected abstract inner class Task(val key: Any) : Callable<V?> {
 
         /**
          * get()
@@ -287,9 +287,11 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
 
         private fun runResult(result: Runnable?) {
             handler.post {
-                if (!isCanceled) {
-                    clear()
-                    result?.run()
+                synchronized(this@TaskManagerEx){
+                    if (!isCanceled) {
+                        clear()
+                        result?.run()
+                    }
                 }
             }
         }
