@@ -9,13 +9,13 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.shxhzhxx.urlloader.UrlLoaderEx
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.*
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 private const val TAG = "MainActivity"
 private const val URL_BIG = "https://static.usasishu.com/bigFile.pdf"
@@ -78,6 +78,36 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         }
         check.setOnClickListener {
             Log.d(TAG, "check:${loader.checkDownload(URL_BIG)}")
+
+            Thread {
+                Log.d(TAG,"thread start:${Thread.currentThread().id}")
+                runBlocking<Unit>(Dispatchers.Main) {
+                    Log.d(TAG,"runBlocking start:${Thread.currentThread().id}")
+                    val asy=async {
+                        Log.d(TAG,"async start:${Thread.currentThread().id}")
+                        return@async suspendCoroutine<Boolean> {
+                            Log.d(TAG,"suspend start:${Thread.currentThread().id}")
+                            Thread{
+                                Log.d(TAG,"sub thread start:${Thread.currentThread().id}")
+                                Thread.sleep(1000)
+                                it.resume(true)
+                                Log.d(TAG,"sub thread end:${Thread.currentThread().id}")
+                            }.start()
+                            launch {
+                                Log.d(TAG,"launch start:${Thread.currentThread().id}")
+                                delay(5000)
+                                Log.d(TAG,"launch end:${Thread.currentThread().id}")
+                            }
+                            Log.d(TAG,"suspend end:${Thread.currentThread().id}")
+                        }.apply {
+                            Log.d(TAG,"async end:${Thread.currentThread().id}") }
+                    }
+                    Log.d(TAG,"asy :${Thread.currentThread().id}")
+                    asy.await()
+                    Log.d(TAG,"runBlocking end:${Thread.currentThread().id}")
+                }
+                Log.d(TAG,"thread end:${Thread.currentThread().id}")
+            }.start()
         }
     }
 }

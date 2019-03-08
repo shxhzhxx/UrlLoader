@@ -2,14 +2,12 @@ package com.shxhzhxx.app
 
 import android.util.Log
 import com.shxhzhxx.urlloader.TaskManagerEx
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.junit.Assert
 import org.junit.Test
 import java.math.BigInteger
 import java.security.MessageDigest
+import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -18,31 +16,61 @@ private const val TAG = "TaskManagerTest"
 class TaskManagerTest {
     @Test
     fun cancelTest() {
-        repeat(100) {
-            runBlocking(Dispatchers.Main) {
+        runBlocking(Dispatchers.Main) {
+            val threadPool = Executors.newCachedThreadPool()
+            repeat(1000) {
+                Log.d(TAG, "cancelTest:$it")
                 val manager = MyTaskManager()
                 val key = "shxhzhxx"
-                val id = manager.asyncLoad(key)
-                Assert.assertTrue(id >= 0)
-                Assert.assertTrue(manager.isRunning(key))
-                Assert.assertTrue(manager.unregister(id))
-                Assert.assertTrue(!manager.isRunning(key))
+                var canceled = false
 
-                Assert.assertTrue(suspendCoroutine { result ->
-                    var canceled = false
-                    manager.asyncLoad(key, onComplete = {
-                        result.resume(!canceled)
-                    }, onCanceled = {
-                        result.resume(canceled)
-                    })
-                    launch {
-                        delay((100 * Math.random()).toLong())
-                        canceled = true
-                        manager.cancel(key)
+                val asyncAssert = async {
+                    delay((100 * Math.random()).toLong())
+                    return@async if (canceled) true else suspendCoroutine { result ->
+                        var asyncCanceled = false
+                        val id = manager.asyncLoad(key, onComplete = {
+                            result.resume(!canceled && !asyncCanceled)
+                        }, onCanceled = {
+                            result.resume(canceled || asyncCanceled)
+                        })
+                        Assert.assertTrue(id >= 0)
+                        Assert.assertTrue(manager.isRunning(key))
+
+                        launch {
+                            delay((100 * Math.random()).toLong())
+                            asyncCanceled = true
+                            manager.unregister(id)
+                        }
                     }
-                })
+                }
+
+                val syncAssert = async {
+                    delay((100 * Math.random()).toLong())
+                    var syncCanceled = false
+                    val task = threadPool.submit {
+                        //同步方法的取消操作无法保证返回值一定为null，所以这里不做判断
+                        //如果delay的时间够短，这里可能都不会被运行到
+                        manager.syncLoad(key, { syncCanceled })
+                    }
+                    delay((100 * Math.random()).toLong())
+                    syncCanceled = true
+                    task.cancel(true)
+                    return@async true
+                }
+                val job = launch {
+                    delay((200 * Math.random()).toLong())
+                    canceled = true
+                    manager.cancel(key)
+                }
+                Assert.assertTrue(asyncAssert.await() && syncAssert.await())
+                job.cancelAndJoin()
             }
         }
+    }
+
+    @Test
+    fun complicateTest() {
+        
     }
 }
 
@@ -69,7 +97,9 @@ class MyTaskManager : TaskManagerEx<MyCallback, String>() {
             }
             val result = md5(myKey)
             postResult = Runnable {
-                asyncObservers.forEach { it?.onComplete?.invoke(result) }
+                asyncObservers.forEach {
+                    it?.onComplete?.invoke(result)
+                }
             }
             return result
         }

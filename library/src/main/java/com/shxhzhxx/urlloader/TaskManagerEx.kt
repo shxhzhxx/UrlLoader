@@ -171,7 +171,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                 isTaskDone = false
                 throw e
             } catch (e: Throwable) {
-                Log.e(TAG, "Unhandled exception occurs in doInBackground: ${e.message}")
+                Log.e(TAG, "Unhandled exception occurs in doInBackground: ${e.javaClass}")
                 runResult(null)
                 isTaskDone = true
                 null
@@ -191,7 +191,8 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
         fun syncGet(canceled: () -> Boolean, observer: T?): V? {
             return kotlin.run {
                 while (!canceled.invoke() && !isCanceled) {
-                    syncFuture?.also { future -> //sync priority
+                    syncFuture?.also { future ->
+                        //sync priority
                         try {
                             future.run()
                             return@run future.get()
@@ -199,7 +200,8 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                             if (canceled.invoke()) {
                                 return@run null
                             } else {
-                                synchronized(this) {//reset future
+                                synchronized(this) {
+                                    //reset future
                                     if (syncFuture?.isDone == true)
                                         syncFuture = FutureTask(this)
                                 }
@@ -213,14 +215,14 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                 }
                 return@run null
             }.also {
-                synchronized(this@TaskManagerEx){
+                synchronized(this@TaskManagerEx) {
                     unregisterSyncObserver(observer)
                     if (syncObservers.isEmpty()) {
                         if (asyncObservers.isEmpty()) {
                             keyTaskMap.remove(key)
                             isCanceled = true
                         } else {
-                            if (!isTaskDone)
+                            if (!isTaskDone && asyncFuture == null)
                                 asyncFuture = threadPoolExecutor.submit(this)
                         }
                     }
@@ -287,7 +289,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
 
         private fun runResult(result: Runnable?) {
             handler.post {
-                synchronized(this@TaskManagerEx){
+                synchronized(this@TaskManagerEx) {
                     if (!isCanceled) {
                         clear()
                         result?.run()
