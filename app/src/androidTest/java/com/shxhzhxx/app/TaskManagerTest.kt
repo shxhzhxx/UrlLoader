@@ -7,77 +7,266 @@ import org.junit.Assert
 import org.junit.Test
 import java.math.BigInteger
 import java.security.MessageDigest
-import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.collections.HashMap
+import kotlin.collections.HashSet
 
 private const val TAG = "TaskManagerTest"
 
 class TaskManagerTest {
     @Test
-    fun cancelTest() {
+    fun simulation() {
+        val thread = Thread.currentThread()
+        fun testFailed() {
+            thread.uncaughtExceptionHandler.uncaughtException(thread, RuntimeException("test failed"))
+        }
         runBlocking(Dispatchers.Main) {
-            val threadPool = Executors.newCachedThreadPool()
-            repeat(1000) {
-                Log.d(TAG, "cancelTest:$it")
-                val manager = MyTaskManager()
-                val key = "shxhzhxx"
-                var canceled = false
-
-                val asyncAssert = async {
-                    delay((100 * Math.random()).toLong())
-                    return@async if (canceled) true else suspendCoroutine { result ->
-                        var asyncCanceled = false
-                        val id = manager.asyncLoad(key, onComplete = {
-                            result.resume(!canceled && !asyncCanceled)
-                        }, onCanceled = {
-                            result.resume(canceled || asyncCanceled)
-                        })
-                        Assert.assertTrue(id >= 0)
-                        Assert.assertTrue(manager.isRunning(key))
-
-                        launch {
-                            delay((100 * Math.random()).toLong())
-                            asyncCanceled = true
-                            manager.unregister(id)
-                        }
-                    }
+            repeat(1000) outer@{ loop ->
+                Log.d(TAG, "complicateTest:$loop")
+                val manager = MySuperTaskManager()
+                val keys = mutableSetOf<String>()
+                fun getKey() = if (Math.random() * keys.size > 10) {
+                    keys.random()
+                } else {
+                    UUID.randomUUID().toString().also { keys.add(it) }
                 }
 
-                val syncAssert = async {
-                    delay((100 * Math.random()).toLong())
-                    var syncCanceled = false
-                    val task = threadPool.submit {
-                        //同步方法的取消操作无法保证返回值一定为null，所以这里不做判断
-                        //如果delay的时间够短，这里可能都不会被运行到
-                        manager.syncLoad(key, { syncCanceled })
-                    }
-                    delay((100 * Math.random()).toLong())
-                    syncCanceled = true
-                    task.cancel(true)
-                    return@async true
-                }
+                val tasks = HashMap<String, MutableSet<Int>>()
+                val tags = HashMap<String, MutableSet<Int>>()
+                var cntCompleted = 0
+                var cntCanceled = 0
+                var cntCancel = 0
+                var cntTotal = 0
                 val job = launch {
-                    delay((200 * Math.random()).toLong())
-                    canceled = true
-                    manager.cancel(key)
+                    while (isActive) {
+                        delay((50 * Math.random()).toLong())
+                        cntTotal++
+                        val key = getKey()
+                        val tag = if (Math.random() * tags.size > 5) {
+                            tags.keys.random()
+                        } else {
+                            UUID.randomUUID().toString()
+                        }
+                        val id = AtomicInteger()
+                        id.set(manager.asyncLoad(key, onComplete = {
+                            debugLog("onComplete:$id    $key   $tag")
+                            cntCompleted++
+                            val taskIds = tasks[key]
+                            val tagIds = tags[tag]
+                            if (taskIds == null || tagIds == null || !taskIds.contains(id.get()) || !tagIds.contains(id.get())) {
+                                testFailed()
+                                return@asyncLoad
+                            }
+                            taskIds.remove(id.get())
+                            if (taskIds.isEmpty()) {
+                                tasks.remove(key)
+                            }
+                            tagIds.remove(id.get())
+                            if (tagIds.isEmpty()) {
+                                tags.remove(tag)
+                            }
+                        }, onCanceled = {
+                            debugLog("onCanceled:$id    $key   $tag")
+                            cntCanceled++
+                            if (tasks[key]?.contains(id.get()) == true && tags[tag]?.contains(id.get()) == true) {
+                                testFailed()
+                            }
+                            tasks[key]?.let {
+                                it.remove(id.get())
+                                if (it.isEmpty())
+                                    tasks.remove(key)
+                            }
+                            tags[tag]?.let {
+                                it.remove(id.get())
+                                if (it.isEmpty())
+                                    tags.remove(tag)
+                            }
+                        }, onFailed = {
+                            //inner cancel always combined with outer cancel
+                            testFailed()
+                        }, tag = tag))
+                        debugLog("start:$id    $key   $tag")
+                        (tasks[key] ?: HashSet<Int>().also { tasks[key] = it }).add(id.get())
+                        (tags[tag] ?: HashSet<Int>().also { tags[tag] = it }).add(id.get())
+                    }
                 }
-                Assert.assertTrue(asyncAssert.await() && syncAssert.await())
-                job.cancelAndJoin()
+
+                val innerTasks = HashMap<String, MutableSet<Int>>()
+                val innerTags = HashMap<String, MutableSet<Int>>()
+                var cntInnerCompleted = 0
+                var cntInnerCanceled = 0
+                var cntInnerCancel = 0
+                var cntInnerTotal = 0
+                val innerJob = launch {
+                    while (isActive) {
+                        delay((50 * Math.random()).toLong())
+                        cntInnerTotal++
+                        val key = getKey()
+                        val tag = if (Math.random() * innerTags.size > 5) {
+                            innerTags.keys.random()
+                        } else {
+                            UUID.randomUUID().toString()
+                        }
+                        val id = AtomicInteger()
+                        id.set(manager.innerTaskManager.asyncLoad(key, onComplete = {
+                            debugLog("inner onComplete:$id    $key   $tag")
+                            cntInnerCompleted++
+                            val taskIds = innerTasks[key]
+                            val tagIds = innerTags[tag]
+                            if (taskIds == null || tagIds == null || !taskIds.contains(id.get()) || !tagIds.contains(id.get())) {
+                                debugLog("key:$key")
+                                debugLog("tag:$tag")
+                                debugLog("id:${id.get()}")
+                                if (taskIds == null)
+                                    debugLog("taskIds==null")
+                                if (tagIds == null)
+                                    debugLog("tagIds==null")
+                                testFailed()
+                                return@asyncLoad
+                            }
+                            taskIds.remove(id.get())
+                            if (taskIds.isEmpty()) {
+                                innerTasks.remove(key)
+                            }
+                            tagIds.remove(id.get())
+                            if (tagIds.isEmpty()) {
+                                innerTags.remove(tag)
+                            }
+                        }, onCanceled = {
+                            debugLog("inner onCanceled:$id    $key   $tag")
+                            cntInnerCanceled++
+                            if (innerTasks[key]?.contains(id.get()) == true && innerTags[tag]?.contains(id.get()) == true) {
+                                testFailed()
+                            }
+                            innerTasks[key]?.let {
+                                it.remove(id.get())
+                                if (it.isEmpty())
+                                    innerTasks.remove(key)
+                            }
+                            innerTags[tag]?.let {
+                                it.remove(id.get())
+                                if (it.isEmpty())
+                                    innerTags.remove(tag)
+                            }
+                        }, tag = tag))
+                        debugLog("inner start:$id    $key   $tag")
+                        (innerTasks[key]
+                                ?: HashSet<Int>().also { innerTasks[key] = it }).add(id.get())
+                        (innerTags[tag]
+                                ?: HashSet<Int>().also { innerTags[tag] = it }).add(id.get())
+                    }
+                }
+
+                val job3 = launch {
+                    val actions = listOf(
+                            {
+                                val key = if (innerTasks.isEmpty()) return@listOf else innerTasks.keys.random()
+                                val taskIds = innerTasks[key]
+                                if (taskIds.isNullOrEmpty()) {
+                                    testFailed()
+                                    return@listOf
+                                }
+                                val id = taskIds.random()
+                                debugLog("unregister inner:   $id  $key")
+                                taskIds.remove(id)
+                                if (taskIds.isEmpty())
+                                    innerTasks.remove(key)
+                                manager.innerTaskManager.unregister(id)
+                                cntInnerCancel++
+                            },
+                            {
+                                val key = if (tasks.isEmpty()) return@listOf else tasks.keys.random()
+                                val taskIds = tasks[key]
+                                if (taskIds.isNullOrEmpty()) {
+                                    testFailed()
+                                    return@listOf
+                                }
+                                val id = taskIds.random()
+                                debugLog("unregister:   $id  $key")
+                                taskIds.remove(id)
+                                if (taskIds.isEmpty())
+                                    tasks.remove(key)
+                                manager.unregister(id)
+                                cntCancel++
+                            },
+                            {
+                                val key = if (keys.isEmpty()) return@listOf else keys.random()
+                                debugLog("cancel:$key")
+                                tasks.remove(key)?.also {
+                                    cntCancel += it.size
+                                    manager.cancel(key)
+                                }
+                                innerTasks.remove(key)?.also {
+                                    cntInnerCancel += it.size
+                                    manager.innerTaskManager.cancel(key)
+                                }
+                            },
+                            {
+                                val tag = if (tags.isEmpty()) return@listOf else tags.keys.random()
+                                val tagIds = tags.remove(tag)
+                                if (tagIds.isNullOrEmpty()) {
+                                    testFailed()
+                                    return@listOf
+                                }
+                                debugLog("unregister tag:$tag")
+                                manager.unregisterByTag(tag)
+                                cntCancel += tagIds.size
+                            },
+                            {
+                                val tag = if (innerTags.isEmpty()) return@listOf else innerTags.keys.random()
+                                val tagIds = innerTags.remove(tag)
+                                if (tagIds.isNullOrEmpty()) {
+                                    testFailed()
+                                    return@listOf
+                                }
+                                debugLog("unregister tag inner:$tag")
+                                manager.innerTaskManager.unregisterByTag(tag)
+                                cntInnerCancel += tagIds.size
+                            }
+                    )
+                    while (isActive) {
+                        delay((50 * Math.random()).toLong())
+                        actions.random().invoke()
+                    }
+                }
+                delay((10000 * Math.random()).toLong())
+                job.cancel()
+                innerJob.cancel()
+                job3.cancel()
+
+                repeat(10) {
+                    delay(100)
+                    if (cntCancel == cntCanceled &&
+                            cntCanceled + cntCompleted == cntTotal &&
+                            cntInnerCancel == cntInnerCanceled &&
+                            cntInnerCanceled + cntInnerCompleted == cntInnerTotal) {
+                        return@outer
+                    }
+                    Log.d(TAG, "cntCancel:$cntCancel")
+                    Log.d(TAG, "cntCanceled:$cntCanceled")
+                    Log.d(TAG, "cntCompleted:$cntCompleted")
+                    Log.d(TAG, "cntTotal:$cntTotal")
+                    Log.d(TAG, "cntInnerCancel:$cntInnerCancel")
+                    Log.d(TAG, "cntInnerCanceled:$cntInnerCanceled")
+                    Log.d(TAG, "cntInnerCompleted:$cntInnerCompleted")
+                    Log.d(TAG, "cntInnerTotal:$cntInnerTotal")
+                }
+                Assert.assertTrue(false)
             }
         }
     }
+}
 
-    @Test
-    fun complicateTest() {
-        
-    }
+private fun debugLog(msg:String){
+    Log.d(TAG,msg)
 }
 
 class MyCallback(
         val onComplete: ((String) -> Unit)? = null,
         val onCanceled: (() -> Unit)? = null,
-        val onProgress: ((progress: Int) -> Unit)? = null
+        val onProgress: ((progress: Int) -> Unit)? = null,
+        val onFailed: (() -> Unit)? = null
 )
 
 class MyTaskManager : TaskManagerEx<MyCallback, String>() {
@@ -86,8 +275,9 @@ class MyTaskManager : TaskManagerEx<MyCallback, String>() {
 
     fun asyncLoad(key: String, tag: Any? = null, onComplete: ((String) -> Unit)? = null,
                   onCanceled: (() -> Unit)? = null,
-                  onProgress: ((progress: Int) -> Unit)? = null) =
-            asyncStart(key, { MyTask(key) }, tag, MyCallback(onComplete, onCanceled, onProgress))
+                  onProgress: ((progress: Int) -> Unit)? = null,
+                  onFailed: (() -> Unit)? = null) =
+            asyncStart(key, { MyTask(key) }, tag, MyCallback(onComplete, onCanceled, onProgress, onFailed))
 
     private inner class MyTask(private val myKey: String) : Task(myKey) {
         override fun doInBackground(): String? {
@@ -97,6 +287,46 @@ class MyTaskManager : TaskManagerEx<MyCallback, String>() {
             }
             val result = md5(myKey)
             postResult = Runnable {
+                asyncObservers.forEach {
+                    it?.onComplete?.invoke(result)
+                }
+            }
+            return result
+        }
+
+        override fun onCanceled() {
+            asyncObservers.forEach { it?.onCanceled?.invoke() }
+        }
+
+        override fun onObserverUnregistered(observer: MyCallback?) {
+            observer?.onCanceled?.invoke()
+        }
+    }
+}
+
+class MySuperTaskManager : TaskManagerEx<MyCallback, String>() {
+
+    val innerTaskManager = MyTaskManager()
+
+    fun syncLoad(key: String, canceled: () -> Boolean, onProgress: ((Int) -> Unit)? = null) =
+            syncStart(key, { MySuperTask(key) }, canceled, MyCallback(onProgress = onProgress))
+
+    fun asyncLoad(key: String, tag: Any? = null, onComplete: ((String) -> Unit)? = null,
+                  onCanceled: (() -> Unit)? = null,
+                  onProgress: ((progress: Int) -> Unit)? = null,
+                  onFailed: (() -> Unit)? = null) =
+            asyncStart(key, { MySuperTask(key) }, tag, MyCallback(onComplete, onCanceled, onProgress, onFailed))
+
+
+    private inner class MySuperTask(private val myKey: String) : Task(myKey) {
+
+        override fun doInBackground(): String? {
+            val result = innerTaskManager.syncLoad(myKey, { isCanceled })
+            postResult = if (result == null) Runnable {
+                asyncObservers.forEach {
+                    it?.onFailed?.invoke()
+                }
+            } else Runnable {
                 asyncObservers.forEach {
                     it?.onComplete?.invoke(result)
                 }

@@ -188,6 +188,9 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
             asyncFuture = threadPoolExecutor.submit(this)
         }
 
+        /*
+        * though syncGet is cancelable (by interrupt thread or invoke cancel with specific key), it is not reliable.
+        * */
         fun syncGet(canceled: () -> Boolean, observer: T?): V? {
             return kotlin.run {
                 while (!canceled.invoke() && !isCanceled) {
@@ -197,7 +200,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            if (canceled.invoke()) {
+                            if (canceled.invoke() || isCanceled) {
                                 return@run null
                             } else {
                                 synchronized(this) {
@@ -222,8 +225,10 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
                             keyTaskMap.remove(key)
                             isCanceled = true
                         } else {
-                            if (!isTaskDone && asyncFuture == null)
+                            if (!isTaskDone && asyncFuture == null) {
                                 asyncFuture = threadPoolExecutor.submit(this)
+                                syncFuture = null
+                            }
                         }
                     }
                 }
