@@ -7,10 +7,10 @@ import org.jetbrains.annotations.Nullable;
 
 import kotlin.jvm.functions.Function0;
 
-public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
+public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback,String> {
     void func() {
         final Object key = new Object();
-        start(key, new Function0<Task>() {
+        asyncStart(key, new Function0<Task>() {
             @Override
             public Task invoke() {
                 return new MyTask(key);
@@ -23,7 +23,7 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
         }
     }
 
-    class MyTask extends TaskManager<JavaInheritance.MyCallback>.Task {
+    class MyTask extends TaskManager<JavaInheritance.MyCallback,String>.Task {
         public MyTask(@NotNull Object $outer) {
             super($outer);
         }
@@ -43,7 +43,7 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
         }
 
         @Override
-        protected void doInBackground() {
+        protected String doInBackground(){
             try {
                 Thread.sleep(10000);
                 setPostResult(new Runnable() {
@@ -55,6 +55,7 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
                         }
                     }
                 });
+                return "success";
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 setPostResult(new Runnable() {
@@ -66,6 +67,7 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback> {
                         }
                     }
                 });
+                return "failed";
             }
         }
     }

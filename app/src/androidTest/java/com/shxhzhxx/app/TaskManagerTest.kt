@@ -1,7 +1,7 @@
 package com.shxhzhxx.app
 
 import android.util.Log
-import com.shxhzhxx.urlloader.TaskManagerEx
+import com.shxhzhxx.urlloader.TaskManager
 import kotlinx.coroutines.*
 import org.junit.Assert
 import org.junit.Test
@@ -259,7 +259,7 @@ class TaskManagerTest {
 }
 
 private fun debugLog(msg: String) {
-    Log.d(TAG, msg)
+//    Log.d(TAG, msg)
 }
 
 class MyCallback(
@@ -269,7 +269,7 @@ class MyCallback(
         val onFailed: (() -> Unit)? = null
 )
 
-class MyTaskManager : TaskManagerEx<MyCallback, String>() {
+class MyTaskManager : TaskManager<MyCallback, String>() {
     fun syncLoad(key: String, canceled: () -> Boolean, onProgress: ((Int) -> Unit)? = null) =
             syncStart(key, { MyTask(key) }, canceled, MyCallback(onProgress = onProgress))
 
@@ -304,7 +304,7 @@ class MyTaskManager : TaskManagerEx<MyCallback, String>() {
     }
 }
 
-class MySuperTaskManager : TaskManagerEx<MyCallback, String>() {
+class MySuperTaskManager : TaskManager<MyCallback, String>() {
 
     val innerTaskManager = MyTaskManager()
 

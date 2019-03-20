@@ -22,22 +22,25 @@ class Callback(
 )
 
 
-class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024, cacheSeed: String = cachePath.absolutePath) : TaskManager<Callback>() {
+class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024, cacheSeed: String = cachePath.absolutePath) : TaskManager<Callback, File>() {
     private val cache = UrlLoaderCache(cachePath, maxCacheSize, cacheSeed).apply { prepare() }
     private val client = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS).build()
 
     @JvmOverloads
-    fun load(url: String, tag: Any? = null,
-             onComplete: ((File) -> Unit)? = null,
-             onFailed: (() -> Unit)? = null,
-             onCanceled: (() -> Unit)? = null,
-             onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-    ) = start(url, { Worker(url) }, tag, Callback(onComplete, onFailed, onCanceled, onProgress)).also { id ->
+    fun asyncLoad(url: String, tag: Any? = null,
+                  onComplete: ((File) -> Unit)? = null,
+                  onFailed: (() -> Unit)? = null,
+                  onCanceled: (() -> Unit)? = null,
+                  onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
+    ) = asyncStart(url, { Worker(url) }, tag, Callback(onComplete, onFailed, onCanceled, onProgress)).also { id ->
         if (id < 0) {
             onFailed?.invoke()
         }
     }
+
+    fun syncLoad(url: String, canceled: () -> Boolean, onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null) =
+            syncStart(url, { Worker(url) }, canceled, Callback(onProgress = onProgress))
 
 
     /**
@@ -81,7 +84,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
      * https://www.rfc-editor.org/rfc/rfc2068.txt
      * https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests
      */
-    fun syncLoad(url: String, progress: ((total: Long, current: Long, speed: Long) -> Unit)? = null): File? {
+    private fun doLoad(url: String, progress: ((total: Long, current: Long, speed: Long) -> Unit)? = null): File? {
         val headerCache = cache.getHeaderCache(url)
         val dataCache = cache.getDataCache(url)
         fun resetCache() =
@@ -129,6 +132,8 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                 }
                 progress?.invoke(totalLen, currentLen + delta, delta * 1000 / Math.max(t - time, 1))
                 dataCache
+            }catch (e:InterruptedIOException){
+                throw InterruptedException()
             } catch (e: IOException) {
                 Log.e(TAG, "read IOException: ${e.message}")
                 null
@@ -221,12 +226,11 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         }
     }
 
-
-    internal inner class Worker(private val url: String) : Task(url) {
-        override fun doInBackground() {
+    private inner class Worker(private val url: String) : Task(url) {
+        override fun doInBackground(): File? {
             if (isCanceled)
-                return
-            val file = syncLoad(url) { total, current, speed ->
+                return null
+            val file = doLoad(url) { total, current, speed ->
                 handler.post {
                     if (!isCanceled)
                         observers.forEach { it?.onProgress?.invoke(total, current, speed) }
@@ -241,6 +245,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                     observers.forEach { it?.onFailed?.invoke() }
                 }
             }
+            return file
         }
 
         override fun onCanceled() {
@@ -263,6 +268,8 @@ private fun OkHttpClient.loadUrl(url: String, converter: ((Request.Builder) -> R
     }
     return try {
         newCall(converter.invoke(request).build()).execute()
+    }catch (e:InterruptedIOException){
+        throw InterruptedException()
     } catch (e: IOException) {
         Log.e(TAG, "execute IOException: ${e.message}")
         null
