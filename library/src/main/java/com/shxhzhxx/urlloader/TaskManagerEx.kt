@@ -136,8 +136,8 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
         /**
          * might contains identical instance multi times.
          */
-        val asyncObservers: List<T?> get() = asyncObserverMap.map { it.value }
-        val observers: List<T?> get() = syncObservers.toMutableList().apply { addAll(asyncObservers) }
+        val asyncObservers: List<T?> get() = synchronized(this@TaskManagerEx) { asyncObserverMap.map { it.value } }
+        val observers: List<T?> get() = synchronized(this@TaskManagerEx) { syncObservers.toMutableList().apply { addAll(asyncObservers) } }
 
         /**
          * pass whatever you want to doInBackground (in main thread) after [doInBackground] has successfully finished (without cancel nor exception).
@@ -258,7 +258,7 @@ open class TaskManagerEx<T, V>(maxPoolSize: Int = CORES) {
 
         }
 
-        internal fun unregisterSyncObserver(observer: T?) {
+        private fun unregisterSyncObserver(observer: T?) {
             syncObservers.remove(observer)
         }
 

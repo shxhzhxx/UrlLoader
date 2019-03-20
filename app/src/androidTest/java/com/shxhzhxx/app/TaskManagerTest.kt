@@ -22,7 +22,7 @@ class TaskManagerTest {
             thread.uncaughtExceptionHandler.uncaughtException(thread, RuntimeException("test failed"))
         }
         runBlocking(Dispatchers.Main) {
-            repeat(1000) outer@{ loop ->
+            repeat(10000) outer@{ loop ->
                 Log.d(TAG, "complicateTest:$loop")
                 val manager = MySuperTaskManager()
                 val keys = mutableSetOf<String>()
@@ -258,8 +258,8 @@ class TaskManagerTest {
     }
 }
 
-private fun debugLog(msg:String){
-    Log.d(TAG,msg)
+private fun debugLog(msg: String) {
+    Log.d(TAG, msg)
 }
 
 class MyCallback(
@@ -282,7 +282,7 @@ class MyTaskManager : TaskManagerEx<MyCallback, String>() {
     private inner class MyTask(private val myKey: String) : Task(myKey) {
         override fun doInBackground(): String? {
             repeat((10 * Math.random()).toInt()) { progress ->
-                observers.forEach { it?.onProgress?.invoke(progress) }
+                handler.post { observers.forEach { it?.onProgress?.invoke(progress) } }
                 Thread.sleep((Math.random() * 20).toLong())
             }
             val result = md5(myKey)
