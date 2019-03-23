@@ -79,14 +79,14 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         return id
     }
 
-    protected fun syncStart(key: Any, builder: () -> Task, canceled: () -> Boolean, observer: T? = null): V? {
-        Log.d(TAG,"syncStart")
+    protected fun syncStart(key: Any, builder: () -> Task, canceler: () -> Boolean, observer: T? = null): V? {
+        Log.d(TAG, "syncStart")
         val task = synchronized(this) {
             return@synchronized (keyTaskMap[key] ?: builder.invoke().also { t ->
                 t.syncInit()
-            }).also { it.registerSyncObserver(observer) }
+            }).also { it.registerSyncObserver(canceler, observer) }
         }
-        return task.syncGet(canceled, observer)
+        return task.syncGet(canceler, observer)
     }
 
     protected fun finalize() {
@@ -139,6 +139,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
          */
         val asyncObservers: List<T?> get() = synchronized(this@TaskManager) { asyncObserverMap.map { it.value } }
         val observers: List<T?> get() = synchronized(this@TaskManager) { syncObservers.toMutableList().apply { addAll(asyncObservers) } }
+        val allSyncCanceled get() = synchronized(this@TaskManager) { syncCancelers.all { it.invoke() } }
 
         /**
          * pass whatever you want to doInBackground (in main thread) after [doInBackground] has successfully finished (without cancel nor exception).
@@ -155,6 +156,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         protected var postResult: Runnable? = null
         private val asyncObserverMap = HashMap<Int, T?>()
         private val syncObservers = HashSet<T?>()
+        private val syncCancelers = HashSet<() -> Boolean>()
         @Volatile
         private var asyncFuture: Future<V?>? = null
         @Volatile
@@ -192,27 +194,27 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         /*
         * though syncGet is cancelable (by interrupt thread or invoke cancel with specific key), it is not reliable.
         * */
-        fun syncGet(canceled: () -> Boolean, observer: T?): V? {
-            Log.d(TAG,"syncGet")
+        fun syncGet(canceler: () -> Boolean, observer: T?): V? {
+            Log.d(TAG, "syncGet")
             return kotlin.run {
-                while (!canceled.invoke() && !isCanceled) {
-                    Log.d(TAG,"while loop")
+                while (!canceler.invoke() && !isCanceled) {
+                    Log.d(TAG, "while loop")
                     syncFuture?.also { future ->
                         //sync priority
-                        Log.d(TAG,"syncFuture")
+                        Log.d(TAG, "syncFuture")
                         try {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            Log.d(TAG,"Throwable:${e.javaClass}")
-                            if (canceled.invoke() || isCanceled) {
+                            Log.d(TAG, "Throwable:${e.javaClass}")
+                            if (canceler.invoke() || isCanceled) {
                                 return@run null
                             } else {
                                 synchronized(this) {
-                                    Log.d(TAG,"reset future")
+                                    Log.d(TAG, "reset future")
                                     //reset future
-                                    if (syncFuture?.isDone == true){
-                                        Log.d(TAG,"new FutureTask")
+                                    if (syncFuture?.isDone == true) {
+                                        Log.d(TAG, "new FutureTask")
                                         syncFuture = FutureTask(this)
                                     }
                                 }
@@ -227,14 +229,14 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
                 return@run null
             }.also {
                 synchronized(this@TaskManager) {
-                    unregisterSyncObserver(observer)
+                    unregisterSyncObserver(canceler, observer)
                     if (syncObservers.isEmpty()) {
                         if (asyncObservers.isEmpty()) {
                             keyTaskMap.remove(key)
                             isCanceled = true
                         } else {
                             if (!isTaskDone && asyncFuture == null) {
-                                Log.d(TAG,"submit async")
+                                Log.d(TAG, "submit async")
                                 asyncFuture = threadPoolExecutor.submit(this)
                                 syncFuture = null
                             }
@@ -267,7 +269,8 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
 
         }
 
-        private fun unregisterSyncObserver(observer: T?) {
+        private fun unregisterSyncObserver(canceler: () -> Boolean, observer: T?) {
+            syncCancelers.remove(canceler)
             syncObservers.remove(observer)
         }
 
@@ -297,7 +300,8 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
             idTaskMap[id] = this
         }
 
-        internal fun registerSyncObserver(observer: T?) {
+        internal fun registerSyncObserver(canceler: () -> Boolean, observer: T?) {
+            syncCancelers.add(canceler)
             syncObservers.add(observer)
         }
 
