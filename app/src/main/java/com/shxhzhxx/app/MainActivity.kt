@@ -6,6 +6,7 @@ import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.Log
+import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.shxhzhxx.urlloader.UrlLoader
 import kotlinx.android.synthetic.main.activity_main.*
@@ -23,6 +24,8 @@ private const val URL_BIG = "https://static.usasishu.com/bigFile.pdf"
 private const val URL_BIG_VIDEO = "https://static.usasishu.com/bigVideoFile.mp4"
 private const val URL_MAX_AGE = "http://plpwobkse.bkt.clouddn.com/ic_launcher.png"
 private const val URL_BIG_IMG = "http://plpwobkse.bkt.clouddn.com/1125-2436-72.png"
+private const val URL_IMG = "https://static.usasishu.com/image/2018/09/30/bg-index.jpg"
+private const val URL_IMG_TINY = "https://static.usasishu.com/image/2018/09/29/img-grew-freely.png"
 
 class MainActivity : AppCompatActivity(), CoroutineScope {
     private val job = SupervisorJob()
@@ -42,8 +45,10 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         val loader = UrlLoader(cacheDir)
         val threadPool = Executors.newCachedThreadPool()
         asyncLoad.setOnClickListener {
-            loader.asyncLoad(URL_BIG, onComplete = {
+            loader.asyncLoad(URL_IMG, onComplete = {
                 Log.d(TAG, "asyncLoad onComplete:${it.absolutePath}")
+                iv.scaleType = ImageView.ScaleType.FIT_CENTER
+                iv.setImageBitmap(it.decodeBitmap(Params(it.absolutePath, iv.width, iv.height, true)))
             }, onProgress = { total, current, speed ->
                 Log.d(TAG, "asyncLoad onProgress: total:$total    current:$current    speed:$speed")
             }, onCanceled = {
@@ -64,7 +69,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             }
         }
         cancel.setOnClickListener {
-            Log.d(TAG,"cancel")
+            Log.d(TAG, "cancel")
             loader.cancel(URL_BIG)
         }
         clear.setOnClickListener {
@@ -87,20 +92,32 @@ private fun File.decodeBitmap(params: Params): Bitmap? {
     BitmapFactory.decodeFile(absolutePath, opts)
     val (height, width) = listOf(params.height, params.width).map { return@map if (it <= 0) Int.MAX_VALUE else it }
     val (out, dst) = listOf(opts.outHeight to height, opts.outWidth to width)
-            .run { return@run if (centerCrop) minBy { it.first / it.second } else maxBy { it.first / it.second } }!!
+            .run { return@run if (centerCrop) minBy { it.first.toFloat() / it.second } else maxBy { it.first.toFloat() / it.second } }!!
+
+    Log.d(TAG,"width:$width")
+    Log.d(TAG,"height:$height")
+    Log.d(TAG,"outWidth:${opts.outWidth}")
+    Log.d(TAG,"outHeight:${opts.outHeight}")
     opts.inSampleSize = out / dst
     opts.inDensity = out
-    opts.inTargetDensity = dst * opts.inSampleSize
+    opts.inTargetDensity = dst
     opts.inScaled = true
     opts.inJustDecodeBounds = false
 
     return if (!centerCrop) BitmapFactory.decodeFile(absolutePath, opts) else
         try {
-            BitmapRegionDecoder.newInstance(absolutePath, !canWrite()).decodeRegion(Rect(
-                    opts.outWidth / 2 - width * opts.inSampleSize / 2,
-                    opts.outHeight / 2 - height * opts.inSampleSize / 2,
-                    opts.outWidth / 2 + width * opts.inSampleSize / 2,
-                    opts.outHeight / 2 + height * opts.inSampleSize / 2), opts)
+            val inSampleSize = out.toFloat() / dst
+            val bitmap = BitmapRegionDecoder.newInstance(absolutePath, !canWrite()).decodeRegion(Rect(
+                    (opts.outWidth / 2 - width * inSampleSize / 2).toInt(),
+                    (opts.outHeight / 2 - height * inSampleSize / 2).toInt(),
+                    (opts.outWidth / 2 + width * inSampleSize / 2).toInt(),
+                    (opts.outHeight / 2 + height * inSampleSize / 2).toInt()), opts) ?: return null
+            Log.d(TAG,"raw height:${bitmap.height}")
+            Log.d(TAG,"raw width:${bitmap.width}")
+            Bitmap.createScaledBitmap(bitmap, height, width, true).also {
+                Log.d(TAG,"bitmap.height:${it.height}")
+                Log.d(TAG,"bitmap.width:${it.width}")
+            }
         } catch (e: IOException) {
             null
         }
