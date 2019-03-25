@@ -80,7 +80,6 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
     }
 
     protected fun syncStart(key: Any, builder: () -> Task, canceler: () -> Boolean, observer: T? = null): V? {
-        Log.d(TAG, "syncStart")
         val task = synchronized(this) {
             return@synchronized (keyTaskMap[key] ?: builder.invoke().also { t ->
                 t.syncInit()
@@ -102,7 +101,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
             tagIdsMap.remove(tag)
     }
 
-    protected abstract inner class Task(val key: Any) : Callable<V?> {
+    protected abstract inner class Task(private val key: Any) : Callable<V?> {
 
         /**
          * get()
@@ -195,26 +194,20 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         * though syncGet is cancelable (by interrupt thread or invoke cancel with specific key), it is not reliable.
         * */
         fun syncGet(canceler: () -> Boolean, observer: T?): V? {
-            Log.d(TAG, "syncGet")
             return kotlin.run {
                 while (!canceler.invoke() && !isCanceled) {
-                    Log.d(TAG, "while loop")
                     syncFuture?.also { future ->
                         //sync priority
-                        Log.d(TAG, "syncFuture")
                         try {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            Log.d(TAG, "Throwable:${e.javaClass}")
                             if (canceler.invoke() || isCanceled) {
                                 return@run null
                             } else {
                                 synchronized(this) {
-                                    Log.d(TAG, "reset future")
                                     //reset future
                                     if (syncFuture?.isDone == true) {
-                                        Log.d(TAG, "new FutureTask")
                                         syncFuture = FutureTask(this)
                                     }
                                 }
@@ -236,7 +229,6 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
                             isCanceled = true
                         } else {
                             if (!isTaskDone && asyncFuture == null) {
-                                Log.d(TAG, "submit async")
                                 asyncFuture = threadPoolExecutor.submit(this)
                                 syncFuture = null
                             }
