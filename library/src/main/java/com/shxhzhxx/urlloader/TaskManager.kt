@@ -63,7 +63,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
             }
             return@run i
         }
-        val task = keyTaskMap[key] ?: builder.invoke().also { t ->
+        val task = keyTaskMap[key] ?: builder().also { t ->
             t.asyncInit()
         }
         task.registerAsyncObserver(id, observer)
@@ -81,7 +81,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
 
     protected fun syncStart(key: Any, builder: () -> Task, canceler: () -> Boolean, observer: T? = null): V? {
         val task = synchronized(this) {
-            return@synchronized (keyTaskMap[key] ?: builder.invoke().also { t ->
+            return@synchronized (keyTaskMap[key] ?: builder().also { t ->
                 t.syncInit()
             }).also { it.registerSyncObserver(canceler, observer) }
         }
@@ -138,7 +138,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
          */
         val asyncObservers: List<T?> get() = synchronized(this@TaskManager) { asyncObserverMap.map { it.value } }
         val observers: List<T?> get() = synchronized(this@TaskManager) { syncObservers.toMutableList().apply { addAll(asyncObservers) } }
-        val allSyncCanceled get() = synchronized(this@TaskManager) { syncCancelers.all { it.invoke() } }
+        val allSyncCanceled get() = synchronized(this@TaskManager) { syncCancelers.all { it() } }
 
         /**
          * pass whatever you want to doInBackground (in main thread) after [doInBackground] has successfully finished (without cancel nor exception).
@@ -195,14 +195,14 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         * */
         fun syncGet(canceler: () -> Boolean, observer: T?): V? {
             return kotlin.run {
-                while (!canceler.invoke() && !isCanceled) {
+                while (!canceler() && !isCanceled) {
                     syncFuture?.also { future ->
                         //sync priority
                         try {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            if (canceler.invoke() || isCanceled) {
+                            if (canceler() || isCanceled) {
                                 return@run null
                             } else {
                                 synchronized(this) {

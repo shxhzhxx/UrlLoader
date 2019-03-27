@@ -114,6 +114,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                 var currentLen = initLen
                 var delta = 0
                 var t = time
+                progress?.invoke(totalLen, currentLen, 0)
                 while (true) {
                     val n = inputStream.read(buff, 0, buffLen)
                     if (n <= 0)
@@ -125,14 +126,14 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                     t = System.currentTimeMillis()
                     if (t - time > 100) {
                         currentLen += delta
-                        progress.invoke(totalLen, currentLen, delta * 1000 / (t - time))
+                        progress(totalLen, currentLen, delta * 1000 / (t - time))
                         time = t
                         delta = 0
                     }
                 }
                 progress?.invoke(totalLen, currentLen + delta, delta * 1000 / Math.max(t - time, 1))
                 dataCache
-            }catch (e:InterruptedIOException){
+            } catch (e: InterruptedIOException) {
                 throw InterruptedException()
             } catch (e: IOException) {
                 Log.e(TAG, "read IOException: ${e.message}")
@@ -268,7 +269,7 @@ private fun OkHttpClient.loadUrl(url: String, converter: ((Request.Builder) -> R
     }
     return try {
         newCall(converter.invoke(request).build()).execute()
-    }catch (e:InterruptedIOException){
+    } catch (e: InterruptedIOException) {
         throw InterruptedException()
     } catch (e: IOException) {
         Log.e(TAG, "execute IOException: ${e.message}")
