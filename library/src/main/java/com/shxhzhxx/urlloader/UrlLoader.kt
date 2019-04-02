@@ -14,15 +14,13 @@ private const val MAX_BUF_SIZE = 50 * 1024
 private const val MIN_BUF_SIZE = 512
 private const val LAST_CHECKED = "UrlLoader-Last-Checked"
 
-class Callback(
-        val onLoad: ((File) -> Unit)? = null,
-        val onFailure: (() -> Unit)? = null,
-        val onCancel: (() -> Unit)? = null,
-        val onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-)
-
-
-class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024, cacheSeed: String = cachePath.absolutePath) : TaskManager<Callback, File>() {
+class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1024 * 1024, cacheSeed: String = cachePath.absolutePath) : TaskManager<UrlLoader.Holder, File>() {
+    class Holder(
+            val onLoad: ((File) -> Unit)? = null,
+            val onFailure: (() -> Unit)? = null,
+            val onCancel: (() -> Unit)? = null,
+            val onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
+    )
     private val cache = UrlLoaderCache(cachePath, maxCacheSize, cacheSeed).apply { prepare() }
     private val client = OkHttpClient.Builder().readTimeout(5, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS).build()
@@ -33,14 +31,14 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                   onFailure: (() -> Unit)? = null,
                   onCancel: (() -> Unit)? = null,
                   onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-    ) = asyncStart(url, { Worker(url) }, tag, Callback(onLoad, onFailure, onCancel, onProgress)).also { id ->
+    ) = asyncStart(url, { Worker(url) }, tag, Holder(onLoad, onFailure, onCancel, onProgress)).also { id ->
         if (id < 0) {
             onFailure?.invoke()
         }
     }
 
     fun syncLoad(url: String, canceled: () -> Boolean, onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null) =
-            syncStart(url, { Worker(url) }, canceled, Callback(onProgress = onProgress))
+            syncStart(url, { Worker(url) }, canceled, Holder(onProgress = onProgress))
 
 
     /**
@@ -253,7 +251,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             observers.forEach { it?.onCancel?.invoke() }
         }
 
-        override fun onObserverUnregistered(observer: Callback?) {
+        override fun onObserverUnregistered(observer: Holder?) {
             observer?.onCancel?.invoke()
         }
     }
