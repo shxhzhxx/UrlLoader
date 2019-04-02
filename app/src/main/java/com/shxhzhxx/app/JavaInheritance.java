@@ -35,7 +35,7 @@ public class JavaInheritance extends TaskManager<JavaInheritance.MyCallback,Stri
         }
 
         @Override
-        protected void onCanceled() {
+        protected void onCancel() {
             for (MyCallback observer : getObservers()) {
                 if (observer != null)
                     observer.onCallback();

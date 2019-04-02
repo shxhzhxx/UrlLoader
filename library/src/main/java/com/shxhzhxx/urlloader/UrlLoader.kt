@@ -15,9 +15,9 @@ private const val MIN_BUF_SIZE = 512
 private const val LAST_CHECKED = "UrlLoader-Last-Checked"
 
 class Callback(
-        val onLoaded: ((File) -> Unit)? = null,
+        val onLoad: ((File) -> Unit)? = null,
         val onFailure: (() -> Unit)? = null,
-        val onCanceled: (() -> Unit)? = null,
+        val onCancel: (() -> Unit)? = null,
         val onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
 )
 
@@ -29,11 +29,11 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
 
     @JvmOverloads
     fun asyncLoad(url: String, tag: Any? = null,
-                  onLoaded: ((File) -> Unit)? = null,
+                  onLoad: ((File) -> Unit)? = null,
                   onFailure: (() -> Unit)? = null,
-                  onCanceled: (() -> Unit)? = null,
+                  onCancel: (() -> Unit)? = null,
                   onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-    ) = asyncStart(url, { Worker(url) }, tag, Callback(onLoaded, onFailure, onCanceled, onProgress)).also { id ->
+    ) = asyncStart(url, { Worker(url) }, tag, Callback(onLoad, onFailure, onCancel, onProgress)).also { id ->
         if (id < 0) {
             onFailure?.invoke()
         }
@@ -229,17 +229,17 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
 
     private inner class Worker(private val url: String) : Task(url) {
         override fun doInBackground(): File? {
-            if (isCanceled)
+            if (isCancelled)
                 return null
             val file = doLoad(url) { total, current, speed ->
                 handler.post {
-                    if (!isCanceled)
+                    if (!isCancelled)
                         observers.forEach { it?.onProgress?.invoke(total, current, speed) }
                 }
             }
             postResult = if (file != null && (!file.canWrite() || file.setWritable(false, false))) {
                 Runnable {
-                    observers.forEach { it?.onLoaded?.invoke(file) }
+                    observers.forEach { it?.onLoad?.invoke(file) }
                 }
             } else {
                 Runnable {
@@ -249,12 +249,12 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             return file
         }
 
-        override fun onCanceled() {
-            observers.forEach { it?.onCanceled?.invoke() }
+        override fun onCancel() {
+            observers.forEach { it?.onCancel?.invoke() }
         }
 
         override fun onObserverUnregistered(observer: Callback?) {
-            observer?.onCanceled?.invoke()
+            observer?.onCancel?.invoke()
         }
     }
 }

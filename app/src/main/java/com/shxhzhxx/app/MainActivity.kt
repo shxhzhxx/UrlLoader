@@ -43,15 +43,15 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         val loader = UrlLoader(cacheDir)
         val threadPool = Executors.newCachedThreadPool()
         asyncLoad.setOnClickListener {
-            loader.asyncLoad(URL_IMG, onComplete = {
+            loader.asyncLoad(URL_IMG, onLoad = {
                 Log.d(TAG, "asyncLoad onComplete:${it.absolutePath}")
                 iv.scaleType = ImageView.ScaleType.FIT_CENTER
                 iv.setImageBitmap(it.decodeBitmap(Params(it.absolutePath, iv.width, iv.height, true)))
             }, onProgress = { total, current, speed ->
                 Log.d(TAG, "asyncLoad onProgress: total:$total    current:$current    speed:$speed")
-            }, onCanceled = {
+            }, onCancel = {
                 Log.d(TAG, "asyncLoad onCanceled")
-            }, onFailed = {
+            }, onFailure = {
                 Log.d(TAG, "asyncLoad onFailed")
             })
         }

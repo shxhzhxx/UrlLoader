@@ -116,16 +116,16 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
          * 1.   all observer unregistered ,which [asyncObservers] return an empty list;
          * 2.   [cancel] been called, which [asyncObservers] return a list contains current asyncObservers.
          * <p>
-         * [onCanceled] will be invoked, avoid running time-consuming tasks in these methods.
+         * [onCancel] will be invoked, avoid running time-consuming tasks in these methods.
          */
         @Volatile
-        var isCanceled = false
+        var isCancelled = false
             private set(value) {
                 if (!field && value) {//Cancel operation can only be performed once
                     field = true
                     asyncFuture?.cancel(true)
                     syncFuture?.cancel(true)
-                    onCanceled()
+                    onCancel()
                 }
             }
 
@@ -162,7 +162,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         private var syncFuture: FutureTask<V?>? = null
 
         final override fun call(): V? {
-            if (isCanceled)
+            if (isCancelled)
                 return null
             return try {
                 val result = doInBackground()
@@ -195,14 +195,14 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         * */
         fun syncGet(canceler: () -> Boolean, observer: T?): V? {
             return kotlin.run {
-                while (!canceler() && !isCanceled) {
+                while (!canceler() && !isCancelled) {
                     syncFuture?.also { future ->
                         //sync priority
                         try {
                             future.run()
                             return@run future.get()
                         } catch (e: Throwable) {
-                            if (canceler() || isCanceled) {
+                            if (canceler() || isCancelled) {
                                 return@run null
                             } else {
                                 synchronized(this) {
@@ -226,7 +226,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
                     if (syncObservers.isEmpty()) {
                         if (asyncObservers.isEmpty()) {
                             keyTaskMap.remove(key)
-                            isCanceled = true
+                            isCancelled = true
                         } else {
                             if (!isTaskDone && asyncFuture == null) {
                                 asyncFuture = threadPoolExecutor.submit(this)
@@ -239,7 +239,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         }
 
         /**
-         * if task has not start when [isCanceled] is set to true,then the task should never run.
+         * if task has not start when [isCancelled] is set to true,then the task should never run.
          * in this circumstance, this method will never be invoked.
          */
         @Throws(InterruptedException::class)
@@ -248,7 +248,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         /**
          * invoked when this task is canceled, in main thread.
          */
-        protected open fun onCanceled() {
+        protected open fun onCancel() {
         }
 
         /**
@@ -272,7 +272,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
                 val observer = asyncObserverMap.remove(id)
                 if (observers.isEmpty()) {
                     keyTaskMap.remove(key)
-                    isCanceled = true
+                    isCancelled = true
                 }
                 onObserverUnregistered(observer)
             }
@@ -280,7 +280,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
 
         internal fun unregisterAll() {
             clear()
-            isCanceled = true
+            isCancelled = true
         }
 
         /**
@@ -300,7 +300,7 @@ open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
         private fun runResult(result: Runnable?) {
             handler.post {
                 synchronized(this@TaskManager) {
-                    if (!isCanceled) {
+                    if (!isCancelled) {
                         clear()
                         result?.run()
                     }

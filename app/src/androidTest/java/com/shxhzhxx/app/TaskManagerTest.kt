@@ -49,8 +49,8 @@ class TaskManagerTest {
                             UUID.randomUUID().toString()
                         }
                         val id = AtomicInteger()
-                        id.set(manager.asyncLoad(key, onComplete = {
-                            debugLog("onComplete:$id    $key   $tag")
+                        id.set(manager.asyncLoad(key, onLoad = {
+                            debugLog("onLoad:$id    $key   $tag")
                             cntCompleted++
                             val taskIds = tasks[key]
                             val tagIds = tags[tag]
@@ -66,8 +66,8 @@ class TaskManagerTest {
                             if (tagIds.isEmpty()) {
                                 tags.remove(tag)
                             }
-                        }, onCanceled = {
-                            debugLog("onCanceled:$id    $key   $tag")
+                        }, onCancel = {
+                            debugLog("onCancel:$id    $key   $tag")
                             cntCanceled++
                             if (tasks[key]?.contains(id.get()) == true && tags[tag]?.contains(id.get()) == true) {
                                 testFailed()
@@ -82,7 +82,7 @@ class TaskManagerTest {
                                 if (it.isEmpty())
                                     tags.remove(tag)
                             }
-                        }, onFailed = {
+                        }, onFailure = {
                             //inner cancel always combined with outer cancel
                             testFailed()
                         }, tag = tag))
@@ -109,8 +109,8 @@ class TaskManagerTest {
                             UUID.randomUUID().toString()
                         }
                         val id = AtomicInteger()
-                        id.set(manager.innerTaskManager.asyncLoad(key, onComplete = {
-                            debugLog("inner onComplete:$id    $key   $tag")
+                        id.set(manager.innerTaskManager.asyncLoad(key, onLoad = {
+                            debugLog("inner onLoad:$id    $key   $tag")
                             cntInnerCompleted++
                             val taskIds = innerTasks[key]
                             val tagIds = innerTags[tag]
@@ -133,8 +133,8 @@ class TaskManagerTest {
                             if (tagIds.isEmpty()) {
                                 innerTags.remove(tag)
                             }
-                        }, onCanceled = {
-                            debugLog("inner onCanceled:$id    $key   $tag")
+                        }, onCancel = {
+                            debugLog("inner onCancel:$id    $key   $tag")
                             cntInnerCanceled++
                             if (innerTasks[key]?.contains(id.get()) == true && innerTags[tag]?.contains(id.get()) == true) {
                                 testFailed()
@@ -263,21 +263,21 @@ private fun debugLog(msg: String) {
 }
 
 class MyCallback(
-        val onComplete: ((String) -> Unit)? = null,
-        val onCanceled: (() -> Unit)? = null,
+        val onLoad: ((String) -> Unit)? = null,
+        val onCancel: (() -> Unit)? = null,
         val onProgress: ((progress: Int) -> Unit)? = null,
-        val onFailed: (() -> Unit)? = null
+        val onFailure: (() -> Unit)? = null
 )
 
 class MyTaskManager : TaskManager<MyCallback, String>() {
     fun syncLoad(key: String, canceled: () -> Boolean, onProgress: ((Int) -> Unit)? = null) =
             syncStart(key, { MyTask(key) }, canceled, MyCallback(onProgress = onProgress))
 
-    fun asyncLoad(key: String, tag: Any? = null, onComplete: ((String) -> Unit)? = null,
-                  onCanceled: (() -> Unit)? = null,
+    fun asyncLoad(key: String, tag: Any? = null, onLoad: ((String) -> Unit)? = null,
+                  onCancel: (() -> Unit)? = null,
                   onProgress: ((progress: Int) -> Unit)? = null,
-                  onFailed: (() -> Unit)? = null) =
-            asyncStart(key, { MyTask(key) }, tag, MyCallback(onComplete, onCanceled, onProgress, onFailed))
+                  onFailure: (() -> Unit)? = null) =
+            asyncStart(key, { MyTask(key) }, tag, MyCallback(onLoad, onCancel, onProgress, onFailure))
 
     private inner class MyTask(private val myKey: String) : Task(myKey) {
         override fun doInBackground(): String? {
@@ -288,18 +288,18 @@ class MyTaskManager : TaskManager<MyCallback, String>() {
             val result = md5(myKey)
             postResult = Runnable {
                 asyncObservers.forEach {
-                    it?.onComplete?.invoke(result)
+                    it?.onLoad?.invoke(result)
                 }
             }
             return result
         }
 
-        override fun onCanceled() {
-            asyncObservers.forEach { it?.onCanceled?.invoke() }
+        override fun onCancel() {
+            asyncObservers.forEach { it?.onCancel?.invoke() }
         }
 
         override fun onObserverUnregistered(observer: MyCallback?) {
-            observer?.onCanceled?.invoke()
+            observer?.onCancel?.invoke()
         }
     }
 }
@@ -311,35 +311,35 @@ class MySuperTaskManager : TaskManager<MyCallback, String>() {
     fun syncLoad(key: String, canceled: () -> Boolean, onProgress: ((Int) -> Unit)? = null) =
             syncStart(key, { MySuperTask(key) }, canceled, MyCallback(onProgress = onProgress))
 
-    fun asyncLoad(key: String, tag: Any? = null, onComplete: ((String) -> Unit)? = null,
-                  onCanceled: (() -> Unit)? = null,
+    fun asyncLoad(key: String, tag: Any? = null, onLoad: ((String) -> Unit)? = null,
+                  onCancel: (() -> Unit)? = null,
                   onProgress: ((progress: Int) -> Unit)? = null,
-                  onFailed: (() -> Unit)? = null) =
-            asyncStart(key, { MySuperTask(key) }, tag, MyCallback(onComplete, onCanceled, onProgress, onFailed))
+                  onFailure: (() -> Unit)? = null) =
+            asyncStart(key, { MySuperTask(key) }, tag, MyCallback(onLoad, onCancel, onProgress, onFailure))
 
 
     private inner class MySuperTask(private val myKey: String) : Task(myKey) {
 
         override fun doInBackground(): String? {
-            val result = innerTaskManager.syncLoad(myKey, { isCanceled })
+            val result = innerTaskManager.syncLoad(myKey, { isCancelled })
             postResult = if (result == null) Runnable {
                 asyncObservers.forEach {
-                    it?.onFailed?.invoke()
+                    it?.onFailure?.invoke()
                 }
             } else Runnable {
                 asyncObservers.forEach {
-                    it?.onComplete?.invoke(result)
+                    it?.onLoad?.invoke(result)
                 }
             }
             return result
         }
 
-        override fun onCanceled() {
-            asyncObservers.forEach { it?.onCanceled?.invoke() }
+        override fun onCancel() {
+            asyncObservers.forEach { it?.onCancel?.invoke() }
         }
 
         override fun onObserverUnregistered(observer: MyCallback?) {
-            observer?.onCanceled?.invoke()
+            observer?.onCancel?.invoke()
         }
     }
 }
