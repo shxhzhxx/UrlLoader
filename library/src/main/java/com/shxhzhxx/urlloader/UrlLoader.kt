@@ -15,8 +15,8 @@ private const val MIN_BUF_SIZE = 512
 private const val LAST_CHECKED = "UrlLoader-Last-Checked"
 
 class Callback(
-        val onComplete: ((File) -> Unit)? = null,
-        val onFailed: (() -> Unit)? = null,
+        val onLoaded: ((File) -> Unit)? = null,
+        val onFailure: (() -> Unit)? = null,
         val onCanceled: (() -> Unit)? = null,
         val onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
 )
@@ -29,13 +29,13 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
 
     @JvmOverloads
     fun asyncLoad(url: String, tag: Any? = null,
-                  onComplete: ((File) -> Unit)? = null,
-                  onFailed: (() -> Unit)? = null,
+                  onLoaded: ((File) -> Unit)? = null,
+                  onFailure: (() -> Unit)? = null,
                   onCanceled: (() -> Unit)? = null,
                   onProgress: ((total: Long, current: Long, speed: Long) -> Unit)? = null
-    ) = asyncStart(url, { Worker(url) }, tag, Callback(onComplete, onFailed, onCanceled, onProgress)).also { id ->
+    ) = asyncStart(url, { Worker(url) }, tag, Callback(onLoaded, onFailure, onCanceled, onProgress)).also { id ->
         if (id < 0) {
-            onFailed?.invoke()
+            onFailure?.invoke()
         }
     }
 
@@ -239,11 +239,11 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             }
             postResult = if (file != null && (!file.canWrite() || file.setWritable(false, false))) {
                 Runnable {
-                    observers.forEach { it?.onComplete?.invoke(file) }
+                    observers.forEach { it?.onLoaded?.invoke(file) }
                 }
             } else {
                 Runnable {
-                    observers.forEach { it?.onFailed?.invoke() }
+                    observers.forEach { it?.onFailure?.invoke() }
                 }
             }
             return file
