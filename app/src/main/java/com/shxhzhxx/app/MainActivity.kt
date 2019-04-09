@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
         val loader = UrlLoader(cacheDir)
         val threadPool = Executors.newCachedThreadPool()
         asyncLoad.setOnClickListener {
-            loader.asyncLoad(URL_IMG, onLoad = {
+            loader.load(URL_IMG, onLoad = {
                 Log.d(TAG, "asyncLoad onComplete:${it.absolutePath}")
                 iv.scaleType = ImageView.ScaleType.FIT_CENTER
                 iv.setImageBitmap(it.decodeBitmap(Params(it.absolutePath, iv.width, iv.height, true)))

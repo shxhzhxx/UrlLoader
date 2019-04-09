@@ -26,7 +26,7 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             .connectTimeout(5, TimeUnit.SECONDS).build()
 
     @JvmOverloads
-    fun asyncLoad(url: String, tag: Any? = null,
+    fun load(url: String, tag: Any? = null,
                   onLoad: ((File) -> Unit)? = null,
                   onFailure: (() -> Unit)? = null,
                   onCancel: (() -> Unit)? = null,
