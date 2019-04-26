@@ -96,15 +96,20 @@ public class DiskLruCache extends LruCache<String, DiskLruCache.Info> implements
         for (File file : files) {
             fileLastModified.put(file, file.lastModified());
         }
-        Arrays.sort(files, new Comparator<File>() {
-            @Override
-            public int compare(File o1, File o2) {
-                Long t1 = fileLastModified.get(o1);
-                Long t2 = fileLastModified.get(o2);
-                assert t1 != null && t2 != null;
-                return (int) (t1 - t2);
-            }
-        });
+        try {
+            Arrays.sort(files, new Comparator<File>() {
+                @Override
+                public int compare(File o1, File o2) {
+                    Long t1 = fileLastModified.get(o1);
+                    Long t2 = fileLastModified.get(o2);
+                    assert t1 != null && t2 != null;
+                    return (int) (t1 - t2);
+                }
+            });
+        }catch (Exception ignore){
+            //针对未知原因的异常：Comparison method violates its general contract!
+            //临时处理。
+        }
         for (File file : files) {
             put(file.getName(), new Info(file, sizeOf(file)));
         }
