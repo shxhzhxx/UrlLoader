@@ -10,7 +10,9 @@ import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.shxhzhxx.urlloader.UrlLoader
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -92,10 +94,10 @@ private fun File.decodeBitmap(params: Params): Bitmap? {
     val (out, dst) = listOf(opts.outHeight to height, opts.outWidth to width)
             .run { return@run if (centerCrop) minBy { it.first.toFloat() / it.second } else maxBy { it.first.toFloat() / it.second } }!!
 
-    Log.d(TAG,"width:$width")
-    Log.d(TAG,"height:$height")
-    Log.d(TAG,"outWidth:${opts.outWidth}")
-    Log.d(TAG,"outHeight:${opts.outHeight}")
+    Log.d(TAG, "width:$width")
+    Log.d(TAG, "height:$height")
+    Log.d(TAG, "outWidth:${opts.outWidth}")
+    Log.d(TAG, "outHeight:${opts.outHeight}")
     opts.inSampleSize = out / dst
     opts.inDensity = out
     opts.inTargetDensity = dst
@@ -110,11 +112,11 @@ private fun File.decodeBitmap(params: Params): Bitmap? {
                     (opts.outHeight / 2 - height * inSampleSize / 2).toInt(),
                     (opts.outWidth / 2 + width * inSampleSize / 2).toInt(),
                     (opts.outHeight / 2 + height * inSampleSize / 2).toInt()), opts) ?: return null
-            Log.d(TAG,"raw height:${bitmap.height}")
-            Log.d(TAG,"raw width:${bitmap.width}")
+            Log.d(TAG, "raw height:${bitmap.height}")
+            Log.d(TAG, "raw width:${bitmap.width}")
             Bitmap.createScaledBitmap(bitmap, height, width, true).also {
-                Log.d(TAG,"bitmap.height:${it.height}")
-                Log.d(TAG,"bitmap.width:${it.width}")
+                Log.d(TAG, "bitmap.height:${it.height}")
+                Log.d(TAG, "bitmap.width:${it.width}")
             }
         } catch (e: IOException) {
             null

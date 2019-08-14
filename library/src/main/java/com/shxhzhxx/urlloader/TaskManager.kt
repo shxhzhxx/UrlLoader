@@ -8,7 +8,7 @@ import java.util.concurrent.*
 private val CORES = Runtime.getRuntime().availableProcessors()
 private const val TAG = "TaskManager"
 
-open class TaskManager<T, V>(maxPoolSize: Int = CORES) {
+abstract class TaskManager<T, V>(maxPoolSize: Int = CORES) {
     var maximumPoolSize = if (maxPoolSize <= 0) CORES else maxPoolSize
         set(value) {
             field = if (value <= 0) CORES else value
