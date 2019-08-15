@@ -143,10 +143,10 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
         }
 
         fun readResponse(response: Response) =
-                if (headerCache.writeHeaders(response.headers())) {
-                    readBody(response.body()!!)
+                if (headerCache.writeHeaders(response.headers)) {
+                    readBody(response.body!!)
                 } else {
-                    response.body()!!.close()
+                    response.body!!.close()
                     null
                 }
 
@@ -157,8 +157,8 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             return if (response.isSuccessful) {
                 readResponse(response)
             } else {
-                Log.e(TAG, "HTTP status code: ${response.code()}")
-                response.body()!!.close() //according to api doc, body shall never be null.
+                Log.e(TAG, "HTTP status code: ${response.code}")
+                response.body!!.close() //according to api doc, body shall never be null.
                 null
             }
         }
@@ -178,13 +178,13 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
                 return@loadUrl builder
             } ?: return null
             return when {
-                response.code() == 206 /*Partial Content*/ -> {
-                    headerCache.writeHeaders(headers.merge(response.headers()))
-                    readBody(response.body()!!, initLen)
+                response.code == 206 /*Partial Content*/ -> {
+                    headerCache.writeHeaders(headers.merge(response.headers))
+                    readBody(response.body!!, initLen)
                 }
                 response.isSuccessful -> if (resetCache()) readResponse(response) else null
                 else -> {
-                    Log.e(TAG, "HTTP status code: ${response.code()}")
+                    Log.e(TAG, "HTTP status code: ${response.code}")
                     response.close()
                     null
                 }
@@ -211,14 +211,14 @@ class UrlLoader(cachePath: File, @IntRange(from = 1) maxCacheSize: Int = 100 * 1
             return@loadUrl builder
         } ?: return null
         return when {
-            response.code() == 304/*not modified*/ -> {
-                headerCache.writeHeaders(headers.merge(response.headers()))
+            response.code == 304/*not modified*/ -> {
+                headerCache.writeHeaders(headers.merge(response.headers))
                 response.close()
                 dataCache
             }
             response.isSuccessful -> if (resetCache()) readResponse(response) else null
             else -> {
-                Log.e(TAG, "HTTP status code: ${response.code()}")
+                Log.e(TAG, "HTTP status code: ${response.code}")
                 response.close()
                 null
             }
@@ -284,7 +284,7 @@ private fun Headers.merge(headers: Headers): Headers = newBuilder().apply {
 
 private fun Headers.isFresh(): Boolean {
     val lastChecked = get(LAST_CHECKED)?.toLong() ?: return false
-    return System.currentTimeMillis() / 1000 < lastChecked + CacheControl.parse(this).maxAgeSeconds()
+    return System.currentTimeMillis() / 1000 < lastChecked + CacheControl.parse(this).maxAgeSeconds
 }
 
 private fun File.writeHeaders(headers: Headers) =
