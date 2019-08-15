@@ -4,13 +4,11 @@ apply plugin: 'com.github.dcendents.android-maven'
 group='com.github.shxhzhxx'
 
 android {
-    compileSdkVersion 28
-
-
+    compileSdkVersion 29
 
     defaultConfig {
         minSdkVersion 14
-        targetSdkVersion 28
+        targetSdkVersion 29
         versionCode 1
         versionName "1.0"
 
@@ -27,7 +25,10 @@ android {
 }
 
 dependencies {
-    implementation 'com.squareup.okhttp3:okhttp:4.1.0'
+    implementation 'com.squareup.okhttp3:okhttp:3.12.3'
+    // higher version of okhttp Requires Android 5+.
+    // https://cashapp.github.io/2019-02-05/okhttp-3-13-requires-android-5
+
     implementation 'androidx.annotation:annotation:1.1.0'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
