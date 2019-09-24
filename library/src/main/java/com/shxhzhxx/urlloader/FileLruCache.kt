@@ -96,8 +96,7 @@ open class FileLruCache(private val cachePath: File, @IntRange(from = 1) maxSize
     override fun accept(dir: File?, name: String?) = name != null && File(dir, name).isFile
 
     init {
-        if ((!cachePath.exists() || !cachePath.isDirectory) && !cachePath.mkdirs())
-            throw IllegalArgumentException("FileLruCache create cachePath failed")
+        require(!((!cachePath.exists() || !cachePath.isDirectory) && !cachePath.mkdirs())) { "FileLruCache create cachePath failed" }
     }
 
     fun prepare() {
